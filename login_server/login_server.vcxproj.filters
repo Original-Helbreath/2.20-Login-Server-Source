@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	<ItemGroup>
+		<Filter Include="application">
+			<UniqueIdentifier>{0B6E2F41-7C3A-4D19-8E52-A1F4C6D2B301}</UniqueIdentifier>
+		</Filter>
+	</ItemGroup>
+	<ItemGroup>
+		<ClCompile Include="src\main.cpp" />
+		<ClCompile Include="src\login_application.cpp" />
+		<ClCompile Include="src\config.cpp">
+			<Filter>application</Filter>
+		</ClCompile>
+		<ClCompile Include="src\log.cpp">
+			<Filter>application</Filter>
+		</ClCompile>
+		<ClCompile Include="src\console_win32.cpp">
+			<Filter>application</Filter>
+		</ClCompile>
+		<ClCompile Include="src\console_posix.cpp">
+			<Filter>application</Filter>
+		</ClCompile>
+	</ItemGroup>
+	<ItemGroup>
+		<ClInclude Include="src\login_application.h" />
+		<ClInclude Include="src\config.h">
+			<Filter>application</Filter>
+		</ClInclude>
+		<ClInclude Include="src\log.h">
+			<Filter>application</Filter>
+		</ClInclude>
+		<ClInclude Include="src\console.h">
+			<Filter>application</Filter>
+		</ClInclude>
+	</ItemGroup>
+</Project>
