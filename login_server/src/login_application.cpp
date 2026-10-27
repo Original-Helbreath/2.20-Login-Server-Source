@@ -73,6 +73,9 @@ namespace hb::server::login
 		}
 
 		// One network io_context on this thread; slow jobs go to the workers (plan sect. 5.1).
+		// Declaration order matters: network is declared first, so it is destroyed last. The world links own the
+		// online registry, whose expiry timers capture it; it is destroyed (timers cancelled) while network still
+		// exists and after network.run() has returned, so no timer handler can run on a destroyed registry.
 		asio::io_context network;
 		worker_pool workers(m_config.database.pool_size);
 		world_link_service world_links(network, std::move(link_options));

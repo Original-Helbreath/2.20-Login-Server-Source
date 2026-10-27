@@ -28,6 +28,13 @@
 // relayed to the World with a request id and answered with the World's result, followed on ok by a fresh
 // character_list. A World that is down, lost or silent for world_request_timeout_seconds gives
 // world_unavailable. The Login server reads no character table.
+//
+// Enter game (LOGIN-008): enter_game_request reserves the account (offline -> handoff_pending, see
+// online_accounts.h), draws a ticket from the CSPRNG, sends session_grant to the session's World and, when the
+// World answers ok, replies enter_game_response with the World's client address and port and the ticket, then
+// closes the session (handed_off). A normal request for an account that is pending or in a World answers
+// already_playing; force_login sends kick_account to the holding World and answers force_disconnect_sent.
+// The ticket is never logged and is wiped from this server's own copies after it is sent.
 namespace hb::server::login
 {
 	struct authenticator_options
@@ -71,6 +78,9 @@ namespace hb::server::login
 			std::uint32_t failures = 0;
 			std::uint32_t creations = 0;
 			std::string world;  // from login_request; the World this session's character requests go to
+			// Between begin_enter and the World's answer: the reservation and the ticket for the reply.
+			std::uint64_t enter_generation = 0;
+			hb::net::session_ticket ticket{};
 		};
 
 		enum class change_kind : std::uint8_t
@@ -84,6 +94,13 @@ namespace hb::server::login
 		void on_change_password(const std::shared_ptr<hb::net::connection>& session, const hb::net::frame& received);
 		void on_create_character(const std::shared_ptr<hb::net::connection>& session, const hb::net::frame& received);
 		void on_delete_character(const std::shared_ptr<hb::net::connection>& session, const hb::net::frame& received);
+		void on_enter_game(const std::shared_ptr<hb::net::connection>& session, const hb::net::frame& received);
+		// The World answered the grant (or did not): reply to the client, with the ticket and the World's address on ok.
+		void finish_enter(const std::shared_ptr<hb::net::connection>& session, std::uint64_t account_id, std::uint64_t generation,
+			world_request_status status, hb::net::link::grant_result grant);
+		void reply_enter(hb::net::connection& session, hb::net::login::enter_result result);
+		// Moves the session's pending ticket out (wiping the stored one); false when the session is unknown.
+		bool take_enter_ticket(const hb::net::connection& session, hb::net::session_ticket& ticket);
 
 		// The session's account id and World; false when the session is unknown.
 		bool session_target(const hb::net::connection& session, std::uint64_t& account_id, std::string& world) const;

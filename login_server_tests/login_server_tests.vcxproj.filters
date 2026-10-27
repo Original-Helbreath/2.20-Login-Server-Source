@@ -15,6 +15,13 @@
 		<ClCompile Include="src\network_tests.cpp" />
 		<ClCompile Include="src\auth_tests.cpp" />
 		<ClCompile Include="src\character_tests.cpp" />
+		<ClCompile Include="src\enter_tests.cpp" />
+		<ClCompile Include="..\login_server\src\online_accounts.cpp">
+			<Filter>login_server</Filter>
+		</ClCompile>
+		<ClCompile Include="..\login_server\src\session_tickets.cpp">
+			<Filter>login_server</Filter>
+		</ClCompile>
 		<ClCompile Include="..\shared\log\log.cpp">
 			<Filter>protocol</Filter>
 		</ClCompile>

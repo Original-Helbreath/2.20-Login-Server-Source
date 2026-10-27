@@ -195,6 +195,7 @@ int main()
 		tests::network_tests(t);
 		tests::auth_tests(t, folder);
 		tests::character_tests(t, folder);
+		tests::enter_tests(t, folder);
 	}
 	catch (const std::exception& failure)
 	{

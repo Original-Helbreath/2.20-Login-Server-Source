@@ -45,11 +45,15 @@ namespace tests
 		hb::net::login::character_result forced_result = hb::net::login::character_result::ok;
 		std::uint8_t max_slots = 4;
 		std::vector<hb::net::character_summary> characters;
+		hb::net::link::grant_result grant_answer = hb::net::link::grant_result::ok;  // every session_grant gets this
 
 		// What it saw.
 		int list_requests = 0;
 		int create_requests = 0;
 		int delete_requests = 0;
+		int grants = 0;
+		hb::net::link::session_grant last_grant{};
+		std::vector<hb::net::link::kick_account> kicks;
 		std::uint64_t last_account_id = 0;
 		std::uint32_t last_request_id = 0;
 		std::vector<hb::net::frame> held;
@@ -117,7 +121,20 @@ namespace tests
 			link_ns::character_list_request list{};
 			link_ns::create_character_request create{};
 			link_ns::delete_character_request remove{};
-			if (hb::net::decode(in, list))
+			link_ns::session_grant grant{};
+			link_ns::kick_account kick{};
+			if (hb::net::decode(in, kick))
+			{
+				kicks.push_back(kick);
+				return;
+			}
+			if (hb::net::decode(in, grant))
+			{
+				++grants;
+				last_grant = grant;
+				last_request_id = grant.request_id;
+			}
+			else if (hb::net::decode(in, list))
 			{
 				++list_requests;
 				last_account_id = list.account_id;
@@ -164,6 +181,27 @@ namespace tests
 				(void)link->send(hb::net::link::character_change_response{ request_id, result });
 		}
 
+		// The World confirming a ticket, or ending a session, over the link.
+		void send_started(std::uint64_t account_id, std::string_view character)
+		{
+			hb::net::link::session_started started{};
+			started.account_id = account_id;
+			started.character.assign(character);
+			(void)link->send(started);
+		}
+
+		void send_ended(std::uint64_t account_id, hb::net::link::session_end_reason reason)
+		{
+			(void)link->send(hb::net::link::session_ended{ account_id, reason });
+		}
+
+		// Drops the link the way a crashed World does.
+		void drop_link()
+		{
+			if (link)
+				link->close(hb::net::close_reason::local_close, "stub dropped the link");
+		}
+
 		bool has(std::string_view name) const
 		{
 			return std::ranges::any_of(characters, [&](const hb::net::character_summary& c) { return c.name.view() == name; });
@@ -175,7 +213,12 @@ namespace tests
 			hb::net::link::character_list_request list{};
 			hb::net::link::create_character_request create{};
 			hb::net::link::delete_character_request remove{};
-			if (hb::net::decode(in, list))
+			hb::net::link::session_grant grant{};
+			if (hb::net::decode(in, grant))
+			{
+				(void)link->send(hb::net::link::session_grant_response{ grant.request_id, grant_answer });
+			}
+			else if (hb::net::decode(in, list))
 			{
 				send_list(list.request_id);
 			}

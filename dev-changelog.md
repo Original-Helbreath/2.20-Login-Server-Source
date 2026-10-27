@@ -1,11 +1,12 @@
-## Broker characters through the World
+## Hand players off to the World
 
 ### Login Server
 
 **Added**
-- After login the Login server relays the character list from the World, sending `login_response` ok only together with the list.
-- Create and delete character requests are format-checked (M13), relayed to the World with request ids and timeouts, and answered with the World's result and a fresh list.
-- `login_request.world` is checked against the configured worlds (`no_such_world`); a World that is not linked or does not answer in time gives `world_unavailable`.
-- Character tests against a scripted World stub, bringing `login_server_tests` to 391 checks.
+- `enter_game_request` reserves the account, draws a 32-byte CSPRNG ticket, sends `session_grant` to the World and answers `enter_game_response` with the World's client address, port and the ticket, then closes the session.
+- An in-memory account online registry (offline, handoff pending, in world): the ticket lifetime expires an unconfirmed handoff to offline, and the World's `session_started` and `session_ended` drive the rest.
+- `already_playing` answers a normal enter for a pending or in-world account; `force_login` sends `kick_account` to the holding World and answers `force_disconnect_sent`.
+- A World claiming an account another World holds is refused and sent `kick_account`; World link loss sets that World's accounts offline, and re-announced `session_started` messages rebuild the state.
+- Enter-game and claim tests against the World stub bring `login_server_tests` to 511 checks.
 
-Summary: Login Server brokers character list, create and delete between the client and the World (2026-10-27)
+Summary: Login Server hands logged-in players to the World with a one-time ticket and tracks who is online (2026-10-27)

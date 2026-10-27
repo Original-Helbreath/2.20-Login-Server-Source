@@ -91,6 +91,9 @@
 		<ClCompile Include="src\auth_tests.cpp" />
 		<ClCompile Include="src\network_tests.cpp" />
 		<ClCompile Include="src\character_tests.cpp" />
+		<ClCompile Include="src\enter_tests.cpp" />
+		<ClCompile Include="..\login_server\src\online_accounts.cpp" />
+		<ClCompile Include="..\login_server\src\session_tickets.cpp" />
 		<ClCompile Include="..\login_server\src\account_service.cpp" />
 		<ClCompile Include="..\login_server\src\database.cpp" />
 		<ClCompile Include="..\login_server\src\hex.cpp" />
@@ -101,6 +104,7 @@
 	</ItemGroup>
 	<ItemGroup>
 		<ClInclude Include="src\test_runner.h" />
+		<ClInclude Include="src\net_fixture.h" />
 	</ItemGroup>
 	<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
