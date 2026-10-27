@@ -107,7 +107,7 @@ namespace tests
 			t.check(direction_of(0x0501) == message_direction::client_to_world, "0x0501 is client -> World");
 			t.check(direction_of(0x0502) == message_direction::world_to_client, "0x0502 is World -> client");
 			t.check(is_known(0x0501) && is_known(0x0502), "the handoff ids are known");
-			t.check(!is_known(0x0000) && !is_known(0x0107) && !is_known(0x0407) && !is_known(0x0500) && !is_known(0x0503) && !is_known(0xFFFF),
+			t.check(!is_known(0x0000) && !is_known(0x0107) && !is_known(0x0407) && !is_known(0x0500) && !is_known(0x0505) && !is_known(0xFFFF),
 				"undefined ids are unknown");
 			t.check(to_wire(world::world_enter_request::id) == 0x0501 && to_wire(world::world_enter_response::id) == 0x0502,
 				"the handoff structs carry their plan ids");
