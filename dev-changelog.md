@@ -1,12 +1,18 @@
-## Add every Login packet as a typed struct
+## Listen for clients and World servers
 
 ### Login Server
 
 **Added**
-- The `message_id` enum covering every client <-> Login and Login <-> World message (0x01xx to 0x04xx), with `direction_of()` and `is_known()`.
-- Every packet of the new Login protocol (plan sect. 4.4 and 4.5) as a typed struct in `shared/protocol` (`login_messages.h`, `link_messages.h`), with size and per-field offset asserts.
-- Received packets are refused when an enum is out of range, a flag is not 0 or 1, or a text field carries bytes after its terminator (`field_checks.h`, `is_well_formed`).
-- Typed encode and decode in `message_codec.h`, including character lists, so each message travels under its own id; the encoder refuses exactly what the decoder refuses, and a refused list leaves nothing behind.
-- 74 message tests in `login_server_tests` (`message_tests.cpp`), bringing it to 179 checks.
+- The Login server listens for game clients and World servers on the configured ports and shuts down cleanly on Ctrl+C or SIGTERM.
+- A World server registers only from its allow-listed address and with its link key; a wrong key, an unknown name or a duplicate is refused, and a stranger gets no reply.
+- The World link exchanges heartbeats both ways and is marked lost after three missed intervals.
+- Client connections close on a malformed frame, an unexpected message id or the pre-login deadline; a World must register within 3 x the heartbeat.
+- Each listener caps its open connections (`listen.max_client_connections`, `listen.max_world_connections`).
+- Asio 1.36.0, the logger and a shared network layer (`hb::net::server`, `hb::net::client`, `hb::net::connection`) now live in 2.20-Shared for the World server and client to build on; `hb::log::write(level, format, args...)` added.
+- 56 network checks, bringing `login_server_tests` to 235.
 
-Summary: Login Server gains the shared, typed client <-> Login and Login <-> World packet structs with their codec and receipt checks (2026-10-27)
+**Fixed**
+- Closing a connection while a write was in flight dropped that write's buffer and crashed the Debug tests.
+- Test runs report CRT asserts on stderr instead of opening a dialog.
+
+Summary: Login Server accepts game clients and authenticated World links over the new shared Asio network layer (2026-10-27)

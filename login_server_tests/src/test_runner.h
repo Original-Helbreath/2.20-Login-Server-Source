@@ -43,4 +43,7 @@ namespace tests
 
 	// message_tests.cpp
 	void message_tests(runner& t);
+
+	// network_tests.cpp
+	void network_tests(runner& t);
 }

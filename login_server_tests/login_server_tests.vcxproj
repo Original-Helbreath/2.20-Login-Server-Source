@@ -39,6 +39,9 @@
 		<OutDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</OutDir>
 		<IntDir>$(SolutionDir)build\obj\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
 	</PropertyGroup>
+	<PropertyGroup>
+		<ExternalIncludePath>$(SolutionDir)shared\third_party\asio\include;$(ExternalIncludePath)</ExternalIncludePath>
+	</PropertyGroup>
 	<ItemDefinitionGroup>
 		<ClCompile>
 			<WarningLevel>Level4</WarningLevel>
@@ -47,8 +50,8 @@
 			<ConformanceMode>true</ConformanceMode>
 			<LanguageStandard>stdcpp20</LanguageStandard>
 			<AdditionalOptions>/utf-8 /Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
-			<AdditionalIncludeDirectories>$(SolutionDir)login_server\src;$(SolutionDir)shared\protocol;$(SolutionDir)third_party\nlohmann_json\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-			<PreprocessorDefinitions>_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+			<AdditionalIncludeDirectories>$(SolutionDir)login_server\src;$(SolutionDir)shared\protocol;$(SolutionDir)shared\log;$(SolutionDir)shared\net;$(SolutionDir)third_party\nlohmann_json\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+			<PreprocessorDefinitions>_CONSOLE;ASIO_STANDALONE;ASIO_NO_DEPRECATED;_WIN32_WINNT=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
 		</ClCompile>
 		<Link>
 			<SubSystem>Console</SubSystem>
@@ -76,9 +79,15 @@
 		<ClCompile Include="src\protocol_tests.cpp" />
 		<ClCompile Include="src\message_tests.cpp" />
 		<ClCompile Include="..\shared\protocol\frame_codec.cpp" />
-		<ClCompile Include="..\login_server\src\log.cpp" />
-		<ClCompile Include="..\login_server\src\console_win32.cpp" />
-		<ClCompile Include="..\login_server\src\console_posix.cpp" />
+		<ClCompile Include="..\shared\log\log.cpp" />
+		<ClCompile Include="..\shared\log\console_win32.cpp" />
+		<ClCompile Include="..\shared\log\console_posix.cpp" />
+		<ClCompile Include="..\shared\net\connection.cpp" />
+		<ClCompile Include="..\shared\net\server.cpp" />
+		<ClCompile Include="..\shared\net\client.cpp" />
+		<ClCompile Include="..\login_server\src\world_link.cpp" />
+		<ClCompile Include="..\login_server\src\client_listener.cpp" />
+		<ClCompile Include="src\network_tests.cpp" />
 		<ClCompile Include="..\login_server\src\account_service.cpp" />
 		<ClCompile Include="..\login_server\src\database.cpp" />
 		<ClCompile Include="..\login_server\src\hex.cpp" />

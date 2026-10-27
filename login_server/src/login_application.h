@@ -19,6 +19,8 @@ namespace hb::server::login
 
 	private:
 		void log_config() const;
+		// Listens for clients and World servers until Ctrl+C or SIGTERM.
+		bool serve();
 
 		login_config m_config;
 	};

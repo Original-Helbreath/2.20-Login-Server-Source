@@ -1,7 +1,6 @@
-## Add every Login packet as a typed struct
+## Listen for clients and World servers
 
 **Added**
-- Every message between the client, the Login server and the World server now has one fixed, shared layout.
-- Malformed messages are refused instead of being half-read.
+- The Login server now accepts connections from game clients and from World servers, which must prove who they are with their link key.
 
-Summary: The Login protocol's messages are defined once and shared by every program that sends them (2026-10-27)
+Summary: The Login server is online for clients and World servers, the next step toward logging in (2026-10-27)
