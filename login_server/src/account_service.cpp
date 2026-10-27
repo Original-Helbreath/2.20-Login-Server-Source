@@ -268,6 +268,17 @@ namespace hb::server::login
 					.where(schemata::col(&pepper_check::pepper_id) == id).first();
 				if (!stored)
 				{
+					// A first fingerprint is trusted only for a pepper no account uses yet; otherwise this key
+					// cannot be told apart from a replaced one.
+					const std::int64_t users = schemata::from<account>(*lease, m_database.model())
+						.where(schemata::col(&account::pepper_id) == id).count();
+					if (users > 0)
+					{
+						error = std::format("pepper id {} is used by {} account(s) but has no recorded fingerprint. If this pepper file "
+							"is the original, record it with: INSERT INTO pepper_checks (pepper_id, fingerprint) VALUES ({}, '{}');",
+							id, users, id, fingerprint);
+						return false;
+					}
 					pepper_check fresh;
 					fresh.pepper_id = id;
 					fresh.fingerprint = fingerprint;

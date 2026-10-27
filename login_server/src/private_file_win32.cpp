@@ -16,7 +16,7 @@
 
 namespace hb::server::platform
 {
-	bool restrict_to_owner(const std::filesystem::path& path, std::string& error)
+	bool create_private_file(const std::filesystem::path& path, std::string& error)
 	{
 		HANDLE token = nullptr;
 		if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
@@ -50,14 +50,24 @@ namespace hb::server::platform
 			return false;
 		}
 		const std::unique_ptr<ACL, decltype(&LocalFree)> acl_owner(acl, LocalFree);
-		// PROTECTED drops the inherited entries, so only the owner keeps access.
-		const DWORD set_result = SetNamedSecurityInfoW(const_cast<LPWSTR>(path.c_str()), SE_FILE_OBJECT,
-			DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION, nullptr, nullptr, acl, nullptr);
-		if (set_result != ERROR_SUCCESS)
+
+		// Protected: the folder's inherited entries are not added, so only the owner has access from creation on.
+		SECURITY_DESCRIPTOR descriptor{};
+		if (!InitializeSecurityDescriptor(&descriptor, SECURITY_DESCRIPTOR_REVISION)
+			|| !SetSecurityDescriptorDacl(&descriptor, TRUE, acl, FALSE)
+			|| !SetSecurityDescriptorControl(&descriptor, SE_DACL_PROTECTED, SE_DACL_PROTECTED))
 		{
-			error = std::format("cannot restrict {} (error {})", path.string(), set_result);
+			error = std::format("cannot build a security descriptor (error {})", GetLastError());
 			return false;
 		}
+		SECURITY_ATTRIBUTES attributes{ sizeof(SECURITY_ATTRIBUTES), &descriptor, FALSE };
+		HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, &attributes, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+		if (file == INVALID_HANDLE_VALUE)
+		{
+			error = std::format("cannot create {} (error {})", path.string(), GetLastError());
+			return false;
+		}
+		CloseHandle(file);
 		return true;
 	}
 }

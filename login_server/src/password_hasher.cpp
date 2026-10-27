@@ -34,6 +34,11 @@ namespace hb::server::login
 	{
 	}
 
+	password_hasher::~password_hasher()
+	{
+		OPENSSL_cleanse(m_pepper.data(), m_pepper.size());
+	}
+
 	bool password_hasher::hash(std::string_view password, password_record& record) const
 	{
 		std::array<std::uint8_t, password_salt_bytes> salt{};

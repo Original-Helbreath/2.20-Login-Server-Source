@@ -9,13 +9,41 @@
 
 #include <algorithm>
 #include <format>
+#include <cstdint>
 #include <fstream>
-#include <sstream>
+#include <limits>
+#include <memory>
 #include <system_error>
 #include <vector>
 
 namespace hb::server::login
 {
+	namespace
+	{
+		// A real file is well under 1 KiB per pepper; anything this large is not a pepper file.
+		constexpr std::uintmax_t max_pepper_file_bytes = 64 * 1024;
+
+		void cleanse(std::string& text)
+		{
+			OPENSSL_cleanse(text.data(), text.size());
+		}
+
+		// A pepper id is a positive number that fits the database column, never silently truncated.
+		bool is_id(const nlohmann::json& value)
+		{
+			if (!value.is_number_integer())
+				return false;
+			const std::int64_t id = value.get<std::int64_t>();
+			return id >= 1 && id <= std::numeric_limits<std::int32_t>::max();
+		}
+	}
+
+	pepper_store::~pepper_store()
+	{
+		for (auto& [id, key] : m_peppers)
+			OPENSSL_cleanse(key.data(), key.size());
+	}
+
 	bool pepper_store::load_or_create(const std::filesystem::path& path, bool may_create, std::string& error)
 	{
 		error.clear();
@@ -43,41 +71,70 @@ namespace hb::server::login
 
 	bool pepper_store::load(const std::filesystem::path& path, std::string& error)
 	{
-		std::ifstream file(path, std::ios::binary);
-		std::stringstream text;
-		text << file.rdbuf();
-		const nlohmann::json root = nlohmann::json::parse(text.str(), nullptr, false, true);
-		if (!file || root.is_discarded() || !root.is_object() || !root.contains("current") || !root.contains("peppers")
-			|| !root["current"].is_number_integer() || !root["peppers"].is_array())
+		// Every copy of the key text (the file contents and the parsed tree) is wiped on the way out.
+		std::string text;
+		nlohmann::json root;
+		const auto wipe = [&]
 		{
-			error = std::format("{} must hold 'current' (a number) and 'peppers' (an array)", path.string());
+			if (root.is_object() && root.contains("peppers") && root["peppers"].is_array())
+			{
+				for (nlohmann::json& entry : root["peppers"])
+				{
+					if (entry.is_object() && entry.contains("key") && entry["key"].is_string())
+						cleanse(entry["key"].get_ref<std::string&>());
+				}
+			}
+			cleanse(text);
+		};
+		std::error_code size_error;
+		const std::uintmax_t size = std::filesystem::file_size(path, size_error);
+		std::ifstream file(path, std::ios::binary);
+		if (!size_error && size <= max_pepper_file_bytes)
+		{
+			text.resize(static_cast<std::size_t>(size));
+			file.read(text.data(), static_cast<std::streamsize>(text.size()));
+		}
+		if (size_error || size > max_pepper_file_bytes || !file)
+		{
+			cleanse(text);
+			error = std::format("cannot read {}", path.string());
+			return false;
+		}
+		root = nlohmann::json::parse(text, nullptr, false, true);
+		if (root.is_discarded() || !root.is_object() || !root.contains("current") || !root.contains("peppers")
+			|| !is_id(root["current"]) || !root["peppers"].is_array())
+		{
+			wipe();
+			error = std::format("{} must hold 'current' (a pepper id) and 'peppers' (an array)", path.string());
 			return false;
 		}
 		for (const nlohmann::json& entry : root["peppers"])
 		{
 			std::vector<std::uint8_t> bytes;
-			std::string key_text;
-			if (entry.is_object() && entry.contains("key") && entry["key"].is_string())
-				key_text = entry["key"].get<std::string>();
-			const bool valid = entry.is_object() && entry.contains("id") && entry["id"].is_number_integer()
-				&& from_hex(key_text, bytes) && bytes.size() == pepper_bytes;
+			const bool valid = entry.is_object() && entry.contains("id") && is_id(entry["id"]) && entry.contains("key")
+				&& entry["key"].is_string() && from_hex(entry["key"].get_ref<const std::string&>(), bytes) && bytes.size() == pepper_bytes;
 			pepper_key key{};
 			if (valid)
 				std::copy(bytes.begin(), bytes.end(), key.begin());
-			OPENSSL_cleanse(key_text.data(), key_text.size());
 			OPENSSL_cleanse(bytes.data(), bytes.size());
 			if (!valid)
 			{
-				error = std::format("{}: each pepper needs an integer 'id' and a 'key' of {} hex digits", path.string(), pepper_bytes * 2);
+				wipe();
+				error = std::format("{}: each pepper needs an 'id' (1 or more) and a 'key' of {} hex digits", path.string(), pepper_bytes * 2);
 				return false;
 			}
-			if (!m_peppers.emplace(entry["id"].get<std::int32_t>(), key).second)
+			const std::int32_t id = entry["id"].get<std::int32_t>();
+			const bool added = m_peppers.emplace(id, key).second;
+			OPENSSL_cleanse(key.data(), key.size());
+			if (!added)
 			{
-				error = std::format("{}: pepper id {} is listed twice", path.string(), entry["id"].get<std::int32_t>());
+				wipe();
+				error = std::format("{}: pepper id {} is listed twice", path.string(), id);
 				return false;
 			}
 		}
 		m_current_id = root["current"].get<std::int32_t>();
+		wipe();
 		if (!m_peppers.contains(m_current_id))
 		{
 			error = std::format("{}: 'current' is {}, which no pepper has", path.string(), m_current_id);
@@ -90,6 +147,8 @@ namespace hb::server::login
 	bool pepper_store::create(const std::filesystem::path& path, std::string& error)
 	{
 		pepper_key key{};
+		// Wipes the local key on every return path.
+		const std::unique_ptr<pepper_key, decltype([](pepper_key* k) { OPENSSL_cleanse(k->data(), k->size()); })> key_wipe(&key);
 		if (!password_hasher::random_bytes(key))
 		{
 			error = "could not generate a pepper";
@@ -103,26 +162,17 @@ namespace hb::server::login
 			error = std::format("cannot create {}: {}", path.parent_path().string(), directory_error.message());
 			return false;
 		}
-		// Written beside the target, limited to this user before the key goes in, then renamed into place,
-		// so a crash never leaves a half-written key file.
+		// Created owner-only beside the target, the key written in, then renamed into place, so no other user can
+		// open it and a crash never leaves a half-written key file.
 		std::filesystem::path temporary = path;
 		temporary += ".tmp";
 		std::error_code ignored;
 		std::filesystem::remove(temporary, ignored);
-		{
-			std::ofstream empty(temporary, std::ios::binary);
-			if (!empty)
-			{
-				error = std::format("cannot write {}", temporary.string());
-				return false;
-			}
-		}
-		if (!platform::restrict_to_owner(temporary, error))
-		{
-			std::filesystem::remove(temporary, ignored);
+		if (!platform::create_private_file(temporary, error))
 			return false;
-		}
-		std::string text = nlohmann::json{ { "current", 1 }, { "peppers", { { { "id", 1 }, { "key", to_hex(key) } } } } }.dump(1, '\t') + "\r\n";
+		nlohmann::json root = { { "current", 1 }, { "peppers", { { { "id", 1 }, { "key", to_hex(key) } } } } };
+		std::string text = root.dump(1, '\t') + "\r\n";
+		cleanse(root["peppers"][0]["key"].get_ref<std::string&>());
 		bool written = false;
 		{
 			std::ofstream file(temporary, std::ios::binary | std::ios::trunc);

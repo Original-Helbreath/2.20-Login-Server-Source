@@ -15,6 +15,12 @@ namespace hb::server::login
 	class pepper_store
 	{
 	public:
+		pepper_store() = default;
+		pepper_store(const pepper_store&) = delete;
+		pepper_store& operator=(const pepper_store&) = delete;
+		// Wipes the keys.
+		~pepper_store();
+
 		// Loads the file, or, when it does not exist and may_create is set (no accounts yet), creates it
 		// owner-only with one fresh random pepper.
 		bool load_or_create(const std::filesystem::path& path, bool may_create, std::string& error);

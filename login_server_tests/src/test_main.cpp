@@ -174,6 +174,17 @@ namespace tests
 		account_service swapped(db, recreated, test_cost);
 		t.check(!swapped.verify_peppers(error), "swapped pepper key detected");
 
+		// Accounts using a pepper with no recorded fingerprint: refused, with the SQL to record it.
+		{
+			schemata::ConnectionPool::Lease checks = db.pool().acquire();
+			std::optional<pepper_check> stored = schemata::from<pepper_check>(*checks, db.model()).first();
+			schemata::ChangeTracker tracker(db.model());
+			tracker.remove(*stored);
+			tracker.save_changes(*checks);
+		}
+		t.check(!accounts.verify_peppers(error) && error.find("INSERT INTO pepper_checks") != std::string::npos,
+			"unfingerprinted pepper in use refused");
+
 		schemata::ConnectionPool::Lease lease = db.pool().acquire();
 		const std::int64_t events = schemata::from<login_event>(*lease, db.model()).count();
 		t.check(events == 9, std::format("every login attempt recorded ({} events)", events));

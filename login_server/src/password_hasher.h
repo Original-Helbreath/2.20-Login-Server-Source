@@ -49,6 +49,10 @@ namespace hb::server::login
 	{
 	public:
 		password_hasher(argon2_cost cost, std::int32_t pepper_id, const pepper_key& pepper);
+		password_hasher(const password_hasher&) = delete;
+		password_hasher& operator=(const password_hasher&) = delete;
+		// Wipes its copy of the pepper.
+		~password_hasher();
 
 		// A new record with a fresh random salt. False if OpenSSL fails (logged).
 		bool hash(std::string_view password, password_record& record) const;
