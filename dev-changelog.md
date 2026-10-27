@@ -1,8 +1,8 @@
-## Shared moves to SHARED-003
+## Schemata v0.1.0-rc.25
 
-### Login Server
+### SQL
 
 **Changed**
-- `shared/` moves to SHARED-003 (game message envelope ids); message tests expect 0x0503 and 0x0504 to be known and probe unknown ids with 0x0505.
+- Schemata v0.1.0-rc.25 vendored (WORLD-007).
 
-Summary: Login Server picks up the client and World game message ids (2026-10-27)
+Summary: Login Server moves to Schemata rc.25 (2026-10-27)
