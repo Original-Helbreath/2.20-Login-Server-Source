@@ -74,6 +74,9 @@
 		<ClCompile Include="src\client_listener.cpp">
 			<Filter>application</Filter>
 		</ClCompile>
+		<ClCompile Include="src\authenticator.cpp">
+			<Filter>application</Filter>
+		</ClCompile>
 		<ClCompile Include="..\shared\protocol\frame_codec.cpp">
 			<Filter>engine\network</Filter>
 		</ClCompile>
@@ -147,6 +150,9 @@
 			<Filter>application</Filter>
 		</ClInclude>
 		<ClInclude Include="src\client_listener.h">
+			<Filter>application</Filter>
+		</ClInclude>
+		<ClInclude Include="src\authenticator.h">
 			<Filter>application</Filter>
 		</ClInclude>
 		<ClInclude Include="src\worker_pool.h">

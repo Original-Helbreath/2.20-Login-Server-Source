@@ -87,6 +87,8 @@
 		<ClCompile Include="..\shared\net\client.cpp" />
 		<ClCompile Include="..\login_server\src\world_link.cpp" />
 		<ClCompile Include="..\login_server\src\client_listener.cpp" />
+		<ClCompile Include="..\login_server\src\authenticator.cpp" />
+		<ClCompile Include="src\auth_tests.cpp" />
 		<ClCompile Include="src\network_tests.cpp" />
 		<ClCompile Include="..\login_server\src\account_service.cpp" />
 		<ClCompile Include="..\login_server\src\database.cpp" />
