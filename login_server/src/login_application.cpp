@@ -2,6 +2,7 @@
 
 #include "account_service.h"
 #include "asio_config.h"
+#include "authenticator.h"
 #include "client_listener.h"
 #include "worker_pool.h"
 #include "world_link.h"
@@ -58,10 +59,10 @@ namespace hb::server::login
 			return false;
 		}
 
-		return serve();
+		return serve(accounts);
 	}
 
-	bool login_application::serve()
+	bool login_application::serve(account_service& accounts)
 	{
 		std::string error;
 		world_link_options link_options;
@@ -75,7 +76,9 @@ namespace hb::server::login
 		asio::io_context network;
 		worker_pool workers(m_config.database.pool_size);
 		world_link_service world_links(network, std::move(link_options));
-		client_listener clients(network, make_client_listener_options(m_config));
+		// Declared after the workers and before the listener: sessions closing at shutdown still call it.
+		authenticator auth(accounts, workers, make_authenticator_options(m_config));
+		client_listener clients(network, make_client_listener_options(m_config), &auth);
 		if (!world_links.start(error) || !clients.start(error))
 		{
 			log::error("listen failed: {}", error);

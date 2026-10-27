@@ -1,6 +1,6 @@
-## Listen for clients and World servers
+## Authenticate clients
 
 **Added**
-- The Login server now accepts connections from game clients and from World servers, which must prove who they are with their link key.
+- Players can create an account, log in and change their password on the Login server.
 
-Summary: The Login server is online for clients and World servers, the next step toward logging in (2026-10-27)
+Summary: Accounts work: create one and log in (2026-10-27)

@@ -19,8 +19,9 @@ namespace hb::server::login
 		return options;
 	}
 
-	client_listener::client_listener(asio::io_context& context, client_listener_options options)
+	client_listener::client_listener(asio::io_context& context, client_listener_options options, authenticator* auth)
 		: m_options(std::move(options))
+		, m_auth(auth)
 		, m_server(hb::net::server::create(context))
 	{
 	}
@@ -42,20 +43,27 @@ namespace hb::server::login
 	void client_listener::on_accept(const std::shared_ptr<hb::net::connection>& session)
 	{
 		log::debug("client {}:{} connected", session->remote_address(), session->remote_port());
-		// Fixed from accept: trickled bytes or frames do not extend the time to log in (LOGIN-006 clears it).
+		// Fixed from accept: trickled bytes or frames do not extend the time to log in; the authenticator
+		// clears the deadline at login and applies the after-login idle timeout.
 		session->set_deadline(m_options.idle_before_login);
 		session->set_idle_timeout(m_options.idle_before_login);
+		authenticator* const auth = m_auth;
 		session->start(
-			[](hb::net::connection& from, const hb::net::frame& received) {
+			[auth](hb::net::connection& from, const hb::net::frame& received) {
 				const std::uint16_t id = received.header.message_id;
 				if (hb::net::direction_of(id) != hb::net::message_direction::client_to_login)
 				{
 					from.close(hb::net::close_reason::protocol_error, std::format("unexpected message 0x{:04x}", id));
 					return;
 				}
-				log::debug("client {}: message 0x{:04x} not handled yet (LOGIN-006)", from.remote_address(), id);
+				if (auth)
+					auth->handle(from, received);
+				else
+					log::debug("client {}: message 0x{:04x} not handled", from.remote_address(), id);
 			},
-			[](hb::net::connection& from, hb::net::close_reason reason, std::string_view detail) {
+			[auth](hb::net::connection& from, hb::net::close_reason reason, std::string_view detail) {
+				if (auth)
+					auth->on_closed(from);
 				const bool expected = reason == hb::net::close_reason::peer_closed || reason == hb::net::close_reason::shutdown;
 				log::write(expected ? log::level::debug : log::level::info, "client {}:{} closed: {}{}{}", from.remote_address(),
 					from.remote_port(), hb::net::to_string(reason), detail.empty() ? "" : ", ", detail);

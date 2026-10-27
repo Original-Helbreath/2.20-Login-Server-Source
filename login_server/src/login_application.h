@@ -1,5 +1,6 @@
 #pragma once
 
+#include "account_service.h"
 #include "config.h"
 
 #include <string>
@@ -20,7 +21,7 @@ namespace hb::server::login
 	private:
 		void log_config() const;
 		// Listens for clients and World servers until Ctrl+C or SIGTERM.
-		bool serve();
+		bool serve(account_service& accounts);
 
 		login_config m_config;
 	};

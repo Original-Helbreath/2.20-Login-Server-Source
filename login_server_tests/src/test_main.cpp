@@ -161,7 +161,8 @@ namespace tests
 
 		schemata::ConnectionPool::Lease lease = db.pool().acquire();
 		const std::int64_t events = schemata::from<login_event>(*lease, db.model()).count();
-		t.check(events == 9, std::format("every login attempt recorded ({} events)", events));
+		// 9 login attempts and 7 create calls
+		t.check(events == 16, std::format("every login attempt and account creation recorded ({} events)", events));
 	}
 }
 
@@ -192,6 +193,7 @@ int main()
 		tests::protocol_tests(t);
 		tests::message_tests(t);
 		tests::network_tests(t);
+		tests::auth_tests(t, folder);
 	}
 	catch (const std::exception& failure)
 	{

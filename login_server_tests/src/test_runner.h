@@ -2,6 +2,7 @@
 
 #include "log.h"
 
+#include <filesystem>
 #include <string_view>
 
 namespace tests
@@ -46,4 +47,7 @@ namespace tests
 
 	// network_tests.cpp
 	void network_tests(runner& t);
+
+	// auth_tests.cpp: each case uses its own subfolder of the given folder
+	void auth_tests(runner& t, const std::filesystem::path& folder);
 }
