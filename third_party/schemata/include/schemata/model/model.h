@@ -246,6 +246,21 @@ struct ForeignKey {
     /// Last, and initialised, so an initialiser written before it existed
     /// still means what it meant and still compiles clean.
     std::string referenced_schema{};
+
+    /// True for a key into a table of this same schema that the model does
+    /// not map -- one another model owns (SCH-0054). Declared with
+    /// `EntityBuilder::references_unowned`.
+    ///
+    /// A run never creates, alters, drops or rebuilds that table, and never
+    /// proposes dropping it under `drop_extra_tables`. It checks the live table
+    /// instead: the referenced columns have to be its primary key or a unique
+    /// index over exactly them, or the run is refused. While the table is not
+    /// there yet the key is deferred (`EnsureResult::deferred_foreign_keys`)
+    /// and a later run adds it. Hashed into the fingerprint. Never set with
+    /// `referenced_schema`.
+    ///
+    /// Last, and initialised, as `referenced_schema` is.
+    bool unowned = false;
 };
 
 struct Index {

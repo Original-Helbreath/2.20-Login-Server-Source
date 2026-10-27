@@ -41,6 +41,12 @@ struct DeferredForeignKey {
 
     /// The schema of the table it references; empty for the connection's own.
     std::string referenced_schema{};
+
+    /// True where the key is into a table another model owns
+    /// (`EntityBuilder::references_unowned`, SCH-0054) and that table does not
+    /// exist yet: the key waits for its owner to create it, and the next run
+    /// that finds it adds the key. `waits_for_seed` is false for such a key.
+    bool waits_for_table = false;
 };
 
 /// A CHECK `ensure_schema()` held back from a run, to be added by the next

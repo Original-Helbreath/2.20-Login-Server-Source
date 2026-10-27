@@ -452,6 +452,46 @@ public:
         return ForeignKeyBuilder{*table_, table_->foreign_keys.size() - 1};
     }
 
+    /// Declare that columns reference a table in this same database that the
+    /// model does not map: one another model owns (SCH-0054).
+    ///
+    ///     e.references_unowned({"account_id"}, "accounts", {"id"})
+    ///         .on_delete(schemata::ReferentialAction::cascade);
+    ///
+    /// Two programs sharing one database each declare only their own tables,
+    /// and a key may still cross between them. The referenced table is never
+    /// created, altered, dropped or rebuilt by this model, and is never an
+    /// extra table to it, `drop_extra_tables` or not. On SQLite the key lives
+    /// in this table's definition, so adding it rebuilds this table only.
+    ///
+    /// When the schema is ensured the live table is checked: the referenced
+    /// columns must be its primary key or a unique index over exactly them --
+    /// in any order on SQLite, in the index's own order on MySQL and MariaDB
+    /// -- or the run is refused with a `schema_error` naming both. The two
+    /// sides' types and collations are not compared; a mismatch is the
+    /// engine's own error when the key is added. On a shared database leave
+    /// `drop_extra_tables` off in every program: the owner's model does not
+    /// map this table either, and would propose dropping it. While the
+    /// table does not exist yet -- its owner has not run -- the key is
+    /// deferred, in `EnsureResult::deferred_foreign_keys` and `diff.notices`,
+    /// the fingerprint is not recorded, and a later run adds the key once the
+    /// table is there, putting the rows to it as any new key is.
+    ///
+    /// Same database only: there is no schema argument, and the alias form of
+    /// `references()` stays the way into another schema. A table this model
+    /// does map is refused here by `validate()`; reference it with
+    /// `references()` or `belongs_to`.
+    ForeignKeyBuilder references_unowned(std::vector<std::string> columns, std::string table,
+                                         std::vector<std::string> referenced_columns) {
+        ForeignKey fk;
+        fk.columns            = std::move(columns);
+        fk.referenced_table   = std::move(table);
+        fk.referenced_columns = std::move(referenced_columns);
+        fk.unowned            = true;
+        table_->foreign_keys.push_back(std::move(fk));
+        return ForeignKeyBuilder{*table_, table_->foreign_keys.size() - 1};
+    }
+
     /// Declare a collection navigation: the many side of a one-to-many.
     ///
     /// `&User::posts` is a `std::vector<Post>` that `describe()` never maps
