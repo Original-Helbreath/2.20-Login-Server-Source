@@ -1,7 +1,7 @@
-## Add the shared packet framing layer
+## Add every Login packet as a typed struct
 
 **Added**
-- The servers and client now share one definition of how network messages are packaged, so they cannot drift apart.
-- Malformed or oversized network messages are refused before they can use up memory.
+- Every message between the client, the Login server and the World server now has one fixed, shared layout.
+- Malformed messages are refused instead of being half-read.
 
-Summary: The groundwork for the new network protocol is in place, shared by every program that speaks it (2026-10-26)
+Summary: The Login protocol's messages are defined once and shared by every program that sends them (2026-10-27)

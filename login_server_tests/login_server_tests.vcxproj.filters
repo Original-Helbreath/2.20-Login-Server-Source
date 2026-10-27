@@ -11,6 +11,7 @@
 	<ItemGroup>
 		<ClCompile Include="src\test_main.cpp" />
 		<ClCompile Include="src\protocol_tests.cpp" />
+		<ClCompile Include="src\message_tests.cpp" />
 		<ClCompile Include="..\shared\protocol\frame_codec.cpp">
 			<Filter>protocol</Filter>
 		</ClCompile>

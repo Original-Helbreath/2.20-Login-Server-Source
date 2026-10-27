@@ -40,4 +40,7 @@ namespace tests
 
 	// protocol_tests.cpp
 	void protocol_tests(runner& t);
+
+	// message_tests.cpp
+	void message_tests(runner& t);
 }

@@ -1,19 +1,12 @@
-## Add the shared packet framing layer
+## Add every Login packet as a typed struct
 
 ### Login Server
 
 **Added**
-- The shared `hb::net` framing layer in `shared/protocol` (the 2.20-Shared submodule): an 8-byte `frame_header`, a stream `frame_decoder` and the encoders.
-- `span_reader` and `span_writer`, which copy whole wire structs in and out of byte spans and enforce exact body sizes; `wire_type` rejects padded, bool and pointer types at compile time.
-- `fixed_string<N>` and the plan sect. 4.3 shared field types, each with its size and field offsets checked at compile time.
-- Frames are refused when they are oversize, carry the wrong protocol version, have a nonzero reserved byte, or are short or long.
-- The frame decoder checks every header as soon as it arrives and accepts any number of complete frames in one read, holding at most one partial frame between reads.
-- `max_body_bytes` is capped at 16 MiB everywhere so frame size sums cannot overflow on the 32-bit client.
-- 58 protocol unit tests in `login_server_tests` (`protocol_tests.cpp`, shared `test_runner.h`), bringing it to 105 checks.
+- The `message_id` enum covering every client <-> Login and Login <-> World message (0x01xx to 0x04xx), with `direction_of()` and `is_known()`.
+- Every packet of the new Login protocol (plan sect. 4.4 and 4.5) as a typed struct in `shared/protocol` (`login_messages.h`, `link_messages.h`), with size and per-field offset asserts.
+- Received packets are refused when an enum is out of range, a flag is not 0 or 1, or a text field carries bytes after its terminator (`field_checks.h`, `is_well_formed`).
+- Typed encode and decode in `message_codec.h`, including character lists, so each message travels under its own id; the encoder refuses exactly what the decoder refuses, and a refused list leaves nothing behind.
+- 74 message tests in `login_server_tests` (`message_tests.cpp`), bringing it to 179 checks.
 
-### Project
-
-**Added**
-- `shared/` git submodule pointing at Original-Helbreath/2.20-Shared (branch development); both projects include `$(SolutionDir)shared\protocol`.
-
-Summary: Login Server gains the shared hb::net framing, codec and wire-type layer from the 2.20-Shared submodule, with 58 new tests (2026-10-26)
+Summary: Login Server gains the shared, typed client <-> Login and Login <-> World packet structs with their codec and receipt checks (2026-10-27)

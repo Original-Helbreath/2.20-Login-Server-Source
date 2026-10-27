@@ -116,6 +116,21 @@
 		<ClInclude Include="..\shared\protocol\frame_codec.h">
 			<Filter>engine\network</Filter>
 		</ClInclude>
+		<ClInclude Include="..\shared\protocol\field_checks.h">
+			<Filter>engine\network</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\protocol\message_id.h">
+			<Filter>engine\network</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\protocol\login_messages.h">
+			<Filter>engine\network</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\protocol\link_messages.h">
+			<Filter>engine\network</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\protocol\message_codec.h">
+			<Filter>engine\network</Filter>
+		</ClInclude>
 		<ClInclude Include="src\account_service.h">
 			<Filter>helbreath</Filter>
 		</ClInclude>

@@ -175,6 +175,7 @@ int main()
 		tests::hasher_tests(t);
 		tests::account_tests(t, folder);
 		tests::protocol_tests(t);
+		tests::message_tests(t);
 	}
 	catch (const std::exception& failure)
 	{
