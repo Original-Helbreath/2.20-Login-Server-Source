@@ -1,6 +1,6 @@
-## Authenticate clients
+## Broker characters through the World
 
 **Added**
-- Players can create an account, log in and change their password on the Login server.
+- After logging in, players see their characters and can create and delete them; the World server holds the characters.
 
-Summary: Accounts work: create one and log in (2026-10-27)
+Summary: Character select works through the Login server (2026-10-27)

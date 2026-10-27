@@ -1,6 +1,8 @@
 #include "authenticator.h"
 
 #include "asio_config.h"
+#include "character_rules.h"
+#include "link_messages.h"
 #include "log.h"
 #include "login_messages.h"
 #include "message_codec.h"
@@ -58,12 +60,14 @@ namespace hb::server::login
 		authenticator_options options;
 		options.allow_account_creation = config.accounts.allows_client_account_creation;
 		options.idle_after_login = std::chrono::seconds(config.session.idle_timeout_after_login_seconds);
+		options.max_body_bytes = config.protocol.max_body_bytes;
 		return options;
 	}
 
-	authenticator::authenticator(account_service& accounts, worker_pool& workers, authenticator_options options)
+	authenticator::authenticator(account_service& accounts, worker_pool& workers, world_link_service& worlds, authenticator_options options)
 		: m_accounts(accounts)
 		, m_workers(workers)
+		, m_worlds(worlds)
 		, m_options(options)
 	{
 	}
@@ -80,8 +84,12 @@ namespace hb::server::login
 			on_change_password(session, received);
 		else if (!is_authenticated(from))
 			from.close(hb::net::close_reason::protocol_error, std::format("message 0x{:04x} before login", id));
+		else if (id == hb::net::to_wire(message_id::create_character_request))
+			on_create_character(session, received);
+		else if (id == hb::net::to_wire(message_id::delete_character_request))
+			on_delete_character(session, received);
 		else
-			log::debug("client {}: message 0x{:04x} not handled yet (LOGIN-007)", from.remote_address(), id);
+			log::debug("client {}: message 0x{:04x} not handled yet", from.remote_address(), id);
 	}
 
 	void authenticator::on_closed(const hb::net::connection& session)
@@ -150,6 +158,7 @@ namespace hb::server::login
 		}
 		std::string name(request.account.view());
 		std::string password(request.password.view());
+		std::string world(request.world.view());
 		wipe(request);
 		if (is_authenticated(*session))
 		{
@@ -161,6 +170,25 @@ namespace hb::server::login
 		{
 			wipe(password);
 			return;
+		}
+		// The World is checked before the password: a refused world costs no Argon2 run, and a client
+		// cannot log in to a World that cannot give it a character list anyway.
+		if (!m_worlds.knows_world(world) || !m_worlds.is_live(world))
+		{
+			wipe(password);
+			end_request(*session);
+			const bool known = m_worlds.knows_world(world);
+			// The name is echoed only when it is a configured one; a client's own text never reaches the log.
+			if (known)
+				log::info("login from {} refused: world {} unavailable", session->remote_address(), world);
+			else
+				log::info("login from {} refused: unknown world", session->remote_address());
+			reply_login(*session, known ? proto::login_result::world_unavailable : proto::login_result::no_such_world);
+			return;
+		}
+		{
+			std::scoped_lock lock(m_mutex);
+			m_sessions[session.get()].world = std::move(world);
 		}
 
 		m_workers.post([this, weak = std::weak_ptr<hb::net::connection>(session), name = std::move(name),
@@ -193,40 +221,13 @@ namespace hb::server::login
 		switch (outcome.result)
 		{
 		case login_result::accepted:
-		{
-			const std::shared_ptr<hb::net::connection> self = session.shared_from_this();
-			std::shared_ptr<hb::net::connection> previous;
+			// Not logged in yet: the World's character list comes first, and the session stays busy until then.
 			{
 				std::scoped_lock lock(m_mutex);
-				session_state& state = m_sessions[&session];
-				state.authenticated = true;
-				state.account_id = outcome.account_id;
-				const auto live = m_live.find(outcome.account_id);
-				if (live != m_live.end())
-				{
-					previous = live->second.lock();
-					live->second = self;
-				}
-				else
-				{
-					m_live.emplace(outcome.account_id, self);
-				}
+				m_sessions[&session].busy = true;
 			}
-			if (previous && previous.get() != &session)
-			{
-				log::info("account {} logged in again from {}; closing the session from {}", outcome.name, address, previous->remote_address());
-				previous->close(hb::net::close_reason::local_close, "superseded by a second login");
-			}
-			else
-			{
-				log::info("account {} logged in from {}", outcome.name, address);
-			}
-			// Logged in: the pre-login deadline no longer applies and the longer idle timeout takes over.
-			session.set_deadline(std::chrono::milliseconds(0));
-			session.set_idle_timeout(m_options.idle_after_login);
-			reply.result = proto::login_result::ok;
-			break;
-		}
+			begin_login_list(session, outcome, address);
+			return;
 		case login_result::no_account:
 		case login_result::wrong_password:
 			// One reply for both, so the answer does not say which account names exist.
@@ -367,5 +368,235 @@ namespace hb::server::login
 		(void)session.send(proto::change_password_response{ changed ? proto::account_result::ok : proto::account_result::failed });
 		if (exhausted)
 			session.close_after_send(hb::net::close_reason::protocol_error, "too many failed attempts");
+	}
+
+	bool authenticator::session_target(const hb::net::connection& session, std::uint64_t& account_id, std::string& world) const
+	{
+		std::scoped_lock lock(m_mutex);
+		const auto found = m_sessions.find(&session);
+		if (found == m_sessions.end())
+			return false;
+		account_id = static_cast<std::uint64_t>(found->second.account_id);
+		world = found->second.world;
+		return true;
+	}
+
+	void authenticator::end_request(const hb::net::connection& session)
+	{
+		std::scoped_lock lock(m_mutex);
+		const auto found = m_sessions.find(&session);
+		if (found != m_sessions.end())
+			found->second.busy = false;
+	}
+
+	void authenticator::reply_login(hb::net::connection& session, proto::login_result result)
+	{
+		proto::login_response reply{};
+		reply.result = result;
+		(void)session.send(reply);
+	}
+
+	bool authenticator::encode_list(const character_list_reply& list, std::vector<std::byte>& bytes) const
+	{
+		const proto::character_list head{ list.max_slots, static_cast<std::uint8_t>(list.characters.size()) };
+		return hb::net::encode_character_list(head, list.characters, m_options.max_body_bytes, bytes);
+	}
+
+	void authenticator::begin_login_list(hb::net::connection& session, const login_outcome& outcome, const std::string& address)
+	{
+		std::uint64_t unused_account = 0;
+		std::string world;
+		if (!session_target(session, unused_account, world))
+			return;
+		m_worlds.request_character_list(world, static_cast<std::uint64_t>(outcome.account_id), session.executor(),
+			[this, weak = std::weak_ptr<hb::net::connection>(session.shared_from_this()), outcome, address](
+				world_request_status status, character_list_reply list) {
+				if (const std::shared_ptr<hb::net::connection> alive = weak.lock())
+					finish_login_list(alive, outcome, address, status, std::move(list));
+			});
+	}
+
+	void authenticator::finish_login_list(const std::shared_ptr<hb::net::connection>& session, const login_outcome& outcome,
+		const std::string& address, world_request_status status, character_list_reply list)
+	{
+		end_request(*session);
+		if (!session->is_open())
+			return;
+		if (status != world_request_status::answered)
+		{
+			log::info("login of account {} from {} refused: the World did not give the character list", outcome.name, address);
+			reply_login(*session, proto::login_result::world_unavailable);
+			return;
+		}
+		std::vector<std::byte> list_bytes;
+		if (!encode_list(list, list_bytes))
+		{
+			log::error("login of account {}: the character list does not fit a frame", outcome.name);
+			reply_login(*session, proto::login_result::service_unavailable);
+			return;
+		}
+
+		std::shared_ptr<hb::net::connection> previous;
+		{
+			std::scoped_lock lock(m_mutex);
+			const auto found = m_sessions.find(session.get());
+			if (found == m_sessions.end())
+				return;
+			found->second.authenticated = true;
+			found->second.account_id = outcome.account_id;
+			const auto live = m_live.find(outcome.account_id);
+			if (live != m_live.end())
+			{
+				previous = live->second.lock();
+				live->second = session;
+			}
+			else
+			{
+				m_live.emplace(outcome.account_id, session);
+			}
+		}
+		if (previous && previous.get() != session.get())
+		{
+			log::info("account {} logged in again from {}; closing the session from {}", outcome.name, address, previous->remote_address());
+			previous->close(hb::net::close_reason::local_close, "superseded by a second login");
+		}
+		else
+		{
+			log::info("account {} logged in from {}", outcome.name, address);
+		}
+		// Logged in: the pre-login deadline no longer applies and the longer idle timeout takes over.
+		session->set_deadline(std::chrono::milliseconds(0));
+		session->set_idle_timeout(m_options.idle_after_login);
+		proto::login_response reply{};
+		reply.result = proto::login_result::ok;
+		(void)session->send(reply);
+		session->send_encoded(std::move(list_bytes));
+	}
+
+	void authenticator::send_change_reply(hb::net::connection& session, change_kind kind, proto::character_result result)
+	{
+		if (kind == change_kind::create)
+			(void)session.send(proto::create_character_response{ result });
+		else
+			(void)session.send(proto::delete_character_response{ result });
+	}
+
+	void authenticator::on_create_character(const std::shared_ptr<hb::net::connection>& session, const hb::net::frame& received)
+	{
+		proto::create_character_request request{};
+		if (!hb::net::decode(received, request))
+		{
+			session->close(hb::net::close_reason::protocol_error, "malformed create_character_request");
+			return;
+		}
+		if (!begin_request(session))
+			return;
+		std::uint64_t account_id = 0;
+		std::string world;
+		if (!session_target(*session, account_id, world))
+			return;
+		const proto::character_result format = check_create_format(request.name.view(), request.sex, request.skin, request.stats);
+		if (format != proto::character_result::ok)
+		{
+			end_request(*session);
+			log::debug("account {}: create_character refused before the World: result {}", account_id, static_cast<unsigned>(format));
+			send_change_reply(*session, change_kind::create, format);
+			return;
+		}
+		hb::net::link::create_character_request forward{};
+		forward.account_id = account_id;
+		forward.name = request.name;
+		forward.sex = request.sex;
+		forward.skin = request.skin;
+		forward.hair_style = request.hair_style;
+		forward.hair_colour = request.hair_colour;
+		forward.underwear_colour = request.underwear_colour;
+		forward.stats = request.stats;
+		m_worlds.request_create_character(world, forward, session->executor(),
+			[this, weak = std::weak_ptr<hb::net::connection>(session)](world_request_status status, proto::character_result result) {
+				if (const std::shared_ptr<hb::net::connection> alive = weak.lock())
+					finish_character_change(alive, change_kind::create, status, result);
+			});
+	}
+
+	void authenticator::on_delete_character(const std::shared_ptr<hb::net::connection>& session, const hb::net::frame& received)
+	{
+		proto::delete_character_request request{};
+		if (!hb::net::decode(received, request))
+		{
+			session->close(hb::net::close_reason::protocol_error, "malformed delete_character_request");
+			return;
+		}
+		if (!begin_request(session))
+			return;
+		std::uint64_t account_id = 0;
+		std::string world;
+		if (!session_target(*session, account_id, world))
+			return;
+		if (!is_valid_character_name(request.name.view()))
+		{
+			end_request(*session);
+			send_change_reply(*session, change_kind::remove, proto::character_result::invalid_name);
+			return;
+		}
+		hb::net::link::delete_character_request forward{};
+		forward.account_id = account_id;
+		forward.name = request.name;
+		m_worlds.request_delete_character(world, forward, session->executor(),
+			[this, weak = std::weak_ptr<hb::net::connection>(session)](world_request_status status, proto::character_result result) {
+				if (const std::shared_ptr<hb::net::connection> alive = weak.lock())
+					finish_character_change(alive, change_kind::remove, status, result);
+			});
+	}
+
+	void authenticator::finish_character_change(const std::shared_ptr<hb::net::connection>& session, change_kind kind,
+		world_request_status status, proto::character_result result)
+	{
+		if (!session->is_open())
+		{
+			end_request(*session);
+			return;
+		}
+		if (status != world_request_status::answered)
+		{
+			end_request(*session);
+			send_change_reply(*session, kind, proto::character_result::world_unavailable);
+			return;
+		}
+		if (result != proto::character_result::ok)
+		{
+			end_request(*session);
+			send_change_reply(*session, kind, result);
+			return;
+		}
+		// The change was made: the client gets the fresh list with the answer, so ask the World for it.
+		std::uint64_t account_id = 0;
+		std::string world;
+		if (!session_target(*session, account_id, world))
+			return;
+		m_worlds.request_character_list(world, account_id, session->executor(),
+			[this, kind, weak = std::weak_ptr<hb::net::connection>(session)](world_request_status list_status, character_list_reply list) {
+				if (const std::shared_ptr<hb::net::connection> alive = weak.lock())
+					finish_change_list(alive, kind, list_status, std::move(list));
+			});
+	}
+
+	void authenticator::finish_change_list(const std::shared_ptr<hb::net::connection>& session, change_kind kind,
+		world_request_status status, character_list_reply list)
+	{
+		end_request(*session);
+		if (!session->is_open())
+			return;
+		std::vector<std::byte> list_bytes;
+		if (status != world_request_status::answered || !encode_list(list, list_bytes))
+		{
+			// The change itself went through; the client learns the list on its next login.
+			log::warning("character change for {} done, but the fresh list is unavailable", session->remote_address());
+			send_change_reply(*session, kind, status == world_request_status::answered ? proto::character_result::failed
+				: proto::character_result::world_unavailable);
+			return;
+		}
+		send_change_reply(*session, kind, proto::character_result::ok);
+		session->send_encoded(std::move(list_bytes));
 	}
 }

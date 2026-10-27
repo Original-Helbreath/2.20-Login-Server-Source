@@ -77,7 +77,7 @@ namespace hb::server::login
 		worker_pool workers(m_config.database.pool_size);
 		world_link_service world_links(network, std::move(link_options));
 		// Declared after the workers and before the listener: sessions closing at shutdown still call it.
-		authenticator auth(accounts, workers, make_authenticator_options(m_config));
+		authenticator auth(accounts, workers, world_links, make_authenticator_options(m_config));
 		client_listener clients(network, make_client_listener_options(m_config), &auth);
 		if (!world_links.start(error) || !clients.start(error))
 		{

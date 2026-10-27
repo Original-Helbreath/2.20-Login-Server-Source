@@ -1,13 +1,11 @@
-## Authenticate clients
+## Broker characters through the World
 
 ### Login Server
 
 **Added**
-- Client authentication: `login_request`, `create_account_request` and `change_password_request` are handled, with hashing and database work on the worker pool.
-- A bad password and an unknown account get the same reply, and a locked account is reported only after the correct password.
-- A second login for an account closes its first session; login clears the pre-login deadline and applies the after-login idle timeout.
-- Account creation (when enabled), password changes and every login attempt are recorded in `login_events`, including creations refused as disabled or over the cap.
-- A connection is closed after three failed logins or password changes (including an unusable stored password) or four account-creation requests.
-- 78 new checks (`auth_tests.cpp`), bringing `login_server_tests` to 313.
+- After login the Login server relays the character list from the World, sending `login_response` ok only together with the list.
+- Create and delete character requests are format-checked (M13), relayed to the World with request ids and timeouts, and answered with the World's result and a fresh list.
+- `login_request.world` is checked against the configured worlds (`no_such_world`); a World that is not linked or does not answer in time gives `world_unavailable`.
+- Character tests against a scripted World stub, bringing `login_server_tests` to 391 checks.
 
-Summary: Login Server authenticates clients, creates accounts and changes passwords with audit and per-connection limits (2026-10-27)
+Summary: Login Server brokers character list, create and delete between the client and the World (2026-10-27)

@@ -15,6 +15,8 @@
 #include "pepper_store.h"
 #include "test_runner.h"
 #include "worker_pool.h"
+#include "world_link.h"
+#include "world_stub.h"
 
 #include <chrono>
 #include <deque>
@@ -151,6 +153,8 @@ namespace tests
 			login::database db;
 			std::unique_ptr<login::account_service> accounts;
 			std::unique_ptr<login::worker_pool> workers;
+			std::unique_ptr<login::world_link_service> worlds;
+			world_stub world;  // a World that answers every list with no characters
 			std::unique_ptr<login::authenticator> auth;
 			std::unique_ptr<login::client_listener> clients;
 			bool ready = false;
@@ -168,11 +172,21 @@ namespace tests
 				accounts = std::make_unique<login::account_service>(db, peppers, test_cost);
 				ready = accounts->verify_peppers(error);
 				workers = std::make_unique<login::worker_pool>(2);
+				login::world_link_options link_options;
+				link_options.listen.bind_address = "127.0.0.1";
+				link_options.listen.port = 0;
+				link_options.worlds.push_back({ "WS1", "127.0.0.1", stub_key() });
+				worlds = std::make_unique<login::world_link_service>(io, link_options);
+				ready = ready && worlds->start(error);
+				if (!ready)
+					return;
+				world.connect(io, worlds->local_port(), "WS1");
+				ready = pump_until(io, [&] { return worlds->is_live("WS1") && world.registered; });
 				login::authenticator_options auth_options;
 				auth_options.allow_account_creation = options.allow_creation;
 				auth_options.idle_after_login = options.after_login;
 				auth_options.max_failed_attempts = options.max_failures;
-				auth = std::make_unique<login::authenticator>(*accounts, *workers, auth_options);
+				auth = std::make_unique<login::authenticator>(*accounts, *workers, *worlds, auth_options);
 				login::client_listener_options listen;
 				listen.listen.bind_address = "127.0.0.1";
 				listen.listen.port = 0;
@@ -185,6 +199,9 @@ namespace tests
 			{
 				if (clients)
 					clients->stop();
+				world.stop();
+				if (worlds)
+					worlds->stop();
 				pump_for(io, 30ms);
 				if (workers)
 					workers->stop();
@@ -249,6 +266,18 @@ namespace tests
 			proto::login_response reply{};
 			if (!receive(f.io, client, reply))
 				return std::nullopt;
+			if (reply.result == proto::login_result::ok)
+			{
+				// login_response ok is always followed by the character list; take it off the inbox.
+				proto::character_list head{};
+				std::vector<hb::net::character_summary> characters;
+				if (!pump_until(f.io, [&] { return !client.inbox.empty(); }))
+					return std::nullopt;
+				const bool is_list = hb::net::decode_character_list(client.inbox.front(), head, characters);
+				client.inbox.pop_front();
+				if (!is_list)
+					return std::nullopt;
+			}
 			return reply.result;
 		}
 
@@ -336,6 +365,8 @@ namespace tests
 			client.send(login_of("Ann", "secret1"));
 			proto::login_response reply{};
 			t.check(receive(f.io, client, reply) && reply.result == proto::login_result::ok, "deadline test: login ok");
+			pump_until(f.io, [&] { return !client.inbox.empty(); }, 500ms);
+			client.inbox.clear();  // the character list that follows login_response ok
 			// The 400 ms pre-login deadline would have fired by now if login had not cleared it.
 			pump_until(f.io, [&] { return client.closed; }, 700ms);
 			t.check(!client.closed, "login clears the pre-login deadline");
@@ -471,11 +502,13 @@ namespace tests
 			pipelined.link->send_encoded(std::move(both));
 			t.check(pump_until(f.io, [&] { return pipelined.closed; }), "a request sent while another is pending closes the connection");
 
-			// A well-formed character message after login is accepted (handled in LOGIN-007).
+			// A well-formed character message after login is answered (brokering is covered in character_tests.cpp).
 			peer logged;
 			t.check(try_login(f, logged, "Ivy", "secret1") == proto::login_result::ok, "post-login message test: login ok");
 			logged.send(proto::delete_character_request{});
-			pump_for(f.io, 100ms);
+			proto::delete_character_response deleted{};
+			t.check(receive(f.io, logged, deleted) && deleted.result == proto::character_result::invalid_name,
+				"an empty character name is answered invalid_name");
 			t.check(!logged.closed, "a character message after login keeps the session open");
 			// An unusable password row answers service_unavailable and counts toward the failure cap.
 			(void)f.accounts->create("Jon", "secret1");

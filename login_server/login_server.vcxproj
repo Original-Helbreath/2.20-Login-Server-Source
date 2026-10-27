@@ -123,6 +123,7 @@
 		<ClInclude Include="src\world_link.h" />
 		<ClInclude Include="src\client_listener.h" />
 		<ClInclude Include="src\authenticator.h" />
+		<ClInclude Include="src\character_rules.h" />
 		<ClInclude Include="src\worker_pool.h" />
 		<ClInclude Include="..\shared\protocol\field_checks.h" />
 		<ClInclude Include="..\shared\protocol\message_id.h" />

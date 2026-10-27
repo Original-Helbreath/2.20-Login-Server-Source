@@ -155,6 +155,9 @@
 		<ClInclude Include="src\authenticator.h">
 			<Filter>application</Filter>
 		</ClInclude>
+		<ClInclude Include="src\character_rules.h">
+			<Filter>application</Filter>
+		</ClInclude>
 		<ClInclude Include="src\worker_pool.h">
 			<Filter>application</Filter>
 		</ClInclude>
