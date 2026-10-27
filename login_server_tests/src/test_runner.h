@@ -53,4 +53,7 @@ namespace tests
 
 	// character_tests.cpp: character brokering against a scripted World; subfolders of the given folder
 	void character_tests(runner& t, const std::filesystem::path& folder);
+
+	// enter_tests.cpp: tickets, the online registry and the enter-game handoff against a scripted World
+	void enter_tests(runner& t, const std::filesystem::path& folder);
 }

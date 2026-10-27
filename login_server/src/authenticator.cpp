@@ -7,6 +7,7 @@
 #include "login_messages.h"
 #include "message_codec.h"
 #include "message_id.h"
+#include "session_tickets.h"
 
 #include <openssl/crypto.h>
 
@@ -88,6 +89,8 @@ namespace hb::server::login
 			on_create_character(session, received);
 		else if (id == hb::net::to_wire(message_id::delete_character_request))
 			on_delete_character(session, received);
+		else if (id == hb::net::to_wire(message_id::enter_game_request))
+			on_enter_game(session, received);
 		else
 			log::debug("client {}: message 0x{:04x} not handled yet", from.remote_address(), id);
 	}
@@ -98,6 +101,7 @@ namespace hb::server::login
 		const auto found = m_sessions.find(&session);
 		if (found == m_sessions.end())
 			return;
+		wipe_ticket(found->second.ticket);
 		if (found->second.authenticated)
 		{
 			// Only the account's current session clears the entry; a superseded one must not remove its successor.
@@ -598,5 +602,173 @@ namespace hb::server::login
 		}
 		send_change_reply(*session, kind, proto::character_result::ok);
 		session->send_encoded(std::move(list_bytes));
+	}
+
+	void authenticator::reply_enter(hb::net::connection& session, proto::enter_result result)
+	{
+		proto::enter_game_response reply{};
+		reply.result = result;
+		(void)session.send(reply);
+	}
+
+	bool authenticator::take_enter_ticket(const hb::net::connection& session, hb::net::session_ticket& ticket)
+	{
+		std::scoped_lock lock(m_mutex);
+		const auto found = m_sessions.find(&session);
+		if (found == m_sessions.end())
+			return false;
+		ticket = found->second.ticket;
+		wipe_ticket(found->second.ticket);
+		return true;
+	}
+
+	void authenticator::on_enter_game(const std::shared_ptr<hb::net::connection>& session, const hb::net::frame& received)
+	{
+		proto::enter_game_request request{};
+		if (!hb::net::decode(received, request))
+		{
+			session->close(hb::net::close_reason::protocol_error, "malformed enter_game_request");
+			return;
+		}
+		if (!begin_request(session))
+			return;
+		std::uint64_t account_id = 0;
+		std::string world;
+		if (!session_target(*session, account_id, world))
+			return;
+		const std::string character(request.character.view());
+		if (!is_valid_character_name(character))
+		{
+			end_request(*session);
+			reply_enter(*session, proto::enter_result::no_such_character);
+			return;
+		}
+		if (!m_worlds.is_live(world))
+		{
+			end_request(*session);
+			reply_enter(*session, proto::enter_result::world_unavailable);
+			return;
+		}
+
+		online_registry& online = m_worlds.online();
+		const enter_outcome outcome = online.begin_enter(account_id, world, character, request.kind == proto::enter_kind::force_login);
+		if (outcome.decision == enter_decision::already_playing)
+		{
+			end_request(*session);
+			log::info("account {} refused entry: already playing", account_id);
+			reply_enter(*session, proto::enter_result::already_playing);
+			return;
+		}
+		if (outcome.decision == enter_decision::kick_holder)
+		{
+			end_request(*session);
+			const bool sent = m_worlds.send_kick(outcome.holder_world, account_id, hb::net::link::kick_reason::forced_login_elsewhere);
+			log::info("account {}: force login, kick {} to world {}", account_id, sent ? "sent" : "not sent (link down)", outcome.holder_world);
+			reply_enter(*session, proto::enter_result::force_disconnect_sent);
+			return;
+		}
+
+		hb::net::link::session_grant grant{};
+		grant.account_id = account_id;
+		grant.character = request.character;
+		if (!generate_ticket(grant.ticket))
+		{
+			online.release(account_id, outcome.generation);
+			end_request(*session);
+			reply_enter(*session, proto::enter_result::world_unavailable);
+			return;
+		}
+		bool known = false;
+		{
+			std::scoped_lock lock(m_mutex);
+			const auto found = m_sessions.find(session.get());
+			known = found != m_sessions.end();
+			if (known)
+			{
+				found->second.enter_generation = outcome.generation;
+				found->second.ticket = grant.ticket;
+			}
+		}
+		if (!known)
+		{
+			// The session closed since begin_enter: nobody can receive this ticket.
+			online.release(account_id, outcome.generation);
+			wipe(grant);
+			return;
+		}
+		m_worlds.request_session_grant(world, grant, session->executor(),
+			[this, weak = std::weak_ptr<hb::net::connection>(session), account_id, generation = outcome.generation](
+				world_request_status status, hb::net::link::grant_result result) {
+				if (const std::shared_ptr<hb::net::connection> alive = weak.lock())
+					finish_enter(alive, account_id, generation, status, result);
+				else
+					m_worlds.online().release(account_id, generation);  // the client left before the answer
+			});
+		wipe(grant);
+	}
+
+	void authenticator::finish_enter(const std::shared_ptr<hb::net::connection>& session, std::uint64_t account_id, std::uint64_t generation,
+		world_request_status status, hb::net::link::grant_result grant)
+	{
+		online_registry& online = m_worlds.online();
+		hb::net::session_ticket ticket{};
+		std::uint64_t unused_account = 0;
+		std::string world;
+		if (!take_enter_ticket(*session, ticket) || !session_target(*session, unused_account, world))
+		{
+			online.release(account_id, generation);
+			wipe_ticket(ticket);
+			return;
+		}
+		end_request(*session);
+		if (!session->is_open())
+		{
+			online.release(account_id, generation);
+			wipe_ticket(ticket);
+			return;
+		}
+
+		proto::enter_result result = proto::enter_result::world_unavailable;
+		if (status == world_request_status::answered)
+		{
+			switch (grant)
+			{
+			case hb::net::link::grant_result::ok:
+				// Still the reservation this grant was made for: not expired, not revoked, the World still linked.
+				if (online.is_pending(account_id, generation))
+					result = proto::enter_result::ok;
+				break;
+			case hb::net::link::grant_result::world_full:
+				result = proto::enter_result::world_full;
+				break;
+			case hb::net::link::grant_result::no_such_character:
+				result = proto::enter_result::no_such_character;
+				break;
+			case hb::net::link::grant_result::shutting_down:
+				result = proto::enter_result::world_shutting_down;
+				break;
+			}
+		}
+		if (result != proto::enter_result::ok)
+		{
+			online.release(account_id, generation);
+			wipe_ticket(ticket);
+			log::info("account {} refused entry to world {}: result {}", account_id, world, static_cast<unsigned>(result));
+			reply_enter(*session, result);
+			return;
+		}
+
+		const world_link_status where = m_worlds.status(world);
+		proto::enter_game_response reply{};
+		reply.result = proto::enter_result::ok;
+		(void)reply.world_host.assign(where.client_host);
+		reply.world_port = where.client_port;
+		reply.ticket = ticket;
+		wipe_ticket(ticket);
+		(void)session->send(reply);
+		wipe(reply);
+		log::info("account {} handed off to world {}", account_id, world);
+		// handed_off: the client now talks to the World, and this session is done.
+		session->close_after_send(hb::net::close_reason::local_close, "handed off to the World");
 	}
 }

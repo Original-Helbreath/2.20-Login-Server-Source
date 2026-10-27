@@ -6,8 +6,12 @@
 #include "message_codec.h"
 #include "message_id.h"
 #include "periodic_timer.h"
+#include "session_tickets.h"
+
+#include <openssl/crypto.h>
 
 #include <algorithm>
+#include <type_traits>
 #include <utility>
 
 namespace hb::server::login
@@ -34,16 +38,32 @@ namespace hb::server::login
 			return !error && parsed == remote;
 		}
 
-		// Hands an outcome to the waiting client session on its own strand; never calls it inline.
-		void deliver(const asio::any_io_executor& to, character_list_done on_list, character_change_done on_change,
-			world_request_status status, character_list_reply list, hb::net::login::character_result change)
+		// Overwrites a request in a way the optimiser may not remove (a session_grant holds a ticket).
+		template <class T>
+		void cleanse_now(T& message)
 		{
-			asio::post(to, [on_list = std::move(on_list), on_change = std::move(on_change), status, list = std::move(list),
-				change]() mutable {
-				if (on_list)
-					on_list(status, std::move(list));
-				else if (on_change)
-					on_change(status, change);
+			static_assert(std::is_trivially_copyable_v<T>);
+			OPENSSL_cleanse(&message, sizeof(T));
+		}
+
+		template <class T>
+		struct cleanse_on_exit
+		{
+			T& target;
+			~cleanse_on_exit() { cleanse_now(target); }
+		};
+
+		// Hands an outcome to the waiting client session on its own strand; never calls it inline.
+		template <class Callbacks, class Outcome>
+		void deliver(const asio::any_io_executor& to, Callbacks done, Outcome outcome)
+		{
+			asio::post(to, [done = std::move(done), outcome = std::move(outcome)]() mutable {
+				if (done.list)
+					done.list(outcome.status, std::move(outcome.list));
+				else if (done.change)
+					done.change(outcome.status, outcome.change);
+				else if (done.grant)
+					done.grant(outcome.status, outcome.grant);
 			});
 		}
 	}
@@ -71,6 +91,7 @@ namespace hb::server::login
 		options.heartbeat_interval = std::chrono::seconds(config.protocol.heartbeat_seconds);
 		options.loss_timeout = options.heartbeat_interval * heartbeats_before_loss;
 		options.request_timeout = std::chrono::seconds(config.protocol.world_request_timeout_seconds);
+		options.ticket_lifetime = std::chrono::seconds(config.session.ticket_lifetime_seconds);
 		options.worlds.clear();
 		for (const world_entry& entry : config.worlds)
 		{
@@ -99,6 +120,7 @@ namespace hb::server::login
 
 	world_link_service::world_link_service(asio::io_context& context, world_link_options options)
 		: m_options(std::move(options))
+		, m_online(context.get_executor(), m_options.ticket_lifetime)
 		, m_server(hb::net::server::create(context))
 	{
 		for (const allowed_world& world : m_options.worlds)
@@ -148,24 +170,51 @@ namespace hb::server::login
 		const asio::any_io_executor& reply_on, character_list_done done)
 	{
 		submit(world, link::character_list_request{ 0, account_id }, message_id::link_character_list_response, reply_on,
-			std::move(done), nullptr);
+			request_callbacks{ std::move(done), nullptr, nullptr });
 	}
 
 	void world_link_service::request_create_character(std::string_view world, link::create_character_request request,
 		const asio::any_io_executor& reply_on, character_change_done done)
 	{
-		submit(world, request, message_id::link_character_change_response, reply_on, nullptr, std::move(done));
+		submit(world, request, message_id::link_character_change_response, reply_on, request_callbacks{ nullptr, std::move(done), nullptr });
 	}
 
 	void world_link_service::request_delete_character(std::string_view world, link::delete_character_request request,
 		const asio::any_io_executor& reply_on, character_change_done done)
 	{
-		submit(world, request, message_id::link_character_change_response, reply_on, nullptr, std::move(done));
+		submit(world, request, message_id::link_character_change_response, reply_on, request_callbacks{ nullptr, std::move(done), nullptr });
+	}
+
+	void world_link_service::request_session_grant(std::string_view world, link::session_grant grant, const asio::any_io_executor& reply_on,
+		session_grant_done done)
+	{
+		const std::int64_t seconds = (m_options.ticket_lifetime.count() + 999) / 1000;
+		grant.expires_in_seconds = static_cast<std::uint16_t>(std::clamp<std::int64_t>(seconds, 1, 65535));
+		submit(world, grant, message_id::link_session_grant_response, reply_on, request_callbacks{ nullptr, nullptr, std::move(done) });
+		cleanse_now(grant);
+	}
+
+	bool world_link_service::send_kick(std::string_view world, std::uint64_t account_id, link::kick_reason reason)
+	{
+		std::shared_ptr<hb::net::connection> target;
+		{
+			std::scoped_lock lock(m_mutex);
+			const auto live = m_live.find(world);
+			if (live != m_live.end())
+				target = live->second.lock();
+			const auto status = m_links.find(world);
+			if (target && (!target->is_open() || status == m_links.end() || status->second.state != link_state::live))
+				target.reset();
+		}
+		if (!target)
+			return false;
+		asio::post(target->executor(), [target, account_id, reason] { (void)target->send(link::kick_account{ account_id, reason }); });
+		return true;
 	}
 
 	template <class Request>
 	void world_link_service::submit(std::string_view world, Request request, message_id answer, const asio::any_io_executor& reply_on,
-		character_list_done on_list, character_change_done on_change)
+		request_callbacks done)
 	{
 		std::shared_ptr<hb::net::connection> link;
 		std::uint32_t id = 0;
@@ -189,24 +238,26 @@ namespace hb::server::login
 				entry.answer = answer;
 				entry.reply_on = reply_on;
 				entry.timer = std::make_shared<asio::steady_timer>(link->executor());
-				entry.on_list = on_list;
-				entry.on_change = on_change;
+				entry.done = std::move(done);
 				m_pending.emplace(id, std::move(entry));
 			}
 		}
 		if (!link)
 		{
-			deliver(reply_on, std::move(on_list), std::move(on_change), world_request_status::unavailable, {},
-				hb::net::login::character_result::world_unavailable);
+			cleanse_now(request);
+			deliver(reply_on, std::move(done), request_outcome{});
 			return;
 		}
 
 		request.request_id = id;
 		// Arm the timer and send on the link's strand, where the answer, the timeout and the close also run.
-		asio::post(link->executor(), [this, link, id, request, timeout = m_options.request_timeout] {
+		// The request (a session_grant carries a ticket) lives in the lambda and is cleansed when the lambda
+		// body ends, sent or not. The frame in the connection's send buffer is out of scope, as for passwords.
+		asio::post(link->executor(), [this, link, id, request, timeout = m_options.request_timeout]() mutable {
+			const cleanse_on_exit<Request> cleanse{ request };
 			if (!link->is_open())
 			{
-				finish(id, world_request_status::unavailable, nullptr, nullptr);
+				finish(id, request_outcome{});
 				return;
 			}
 			std::shared_ptr<asio::steady_timer> timer;
@@ -229,15 +280,15 @@ namespace hb::server::login
 						world_name = found->second.world;
 				}
 				log::warning("world {}: request {} timed out", world_name, id);
-				finish(id, world_request_status::unavailable, nullptr, nullptr);
+				finish(id, request_outcome{});
 			});
 			if (!link->send(request))
-				finish(id, world_request_status::unavailable, nullptr, nullptr);
+				finish(id, request_outcome{});
 		});
+		cleanse_now(request);  // submit's own copy
 	}
 
-	void world_link_service::finish(std::uint32_t request_id, world_request_status status, character_list_reply* list,
-		const hb::net::login::character_result* change)
+	void world_link_service::finish(std::uint32_t request_id, request_outcome outcome)
 	{
 		pending_request entry;
 		{
@@ -250,9 +301,7 @@ namespace hb::server::login
 		}
 		if (entry.timer)
 			entry.timer->cancel();
-		deliver(entry.reply_on, std::move(entry.on_list), std::move(entry.on_change), status,
-			list ? std::move(*list) : character_list_reply{},
-			change ? *change : hb::net::login::character_result::world_unavailable);
+		deliver(entry.reply_on, std::move(entry.done), std::move(outcome));
 	}
 
 	void world_link_service::finish_all(const hb::net::connection& link)
@@ -267,7 +316,7 @@ namespace hb::server::login
 			}
 		}
 		for (const std::uint32_t id : ids)
-			finish(id, world_request_status::unavailable, nullptr, nullptr);
+			finish(id, request_outcome{});
 	}
 
 	world_link_service::answer_check world_link_service::check_answer(const hb::net::connection& link, std::uint32_t request_id,
@@ -303,7 +352,10 @@ namespace hb::server::login
 		character_list_reply reply;
 		reply.max_slots = head.max_slots;
 		reply.characters = std::move(summaries);
-		finish(head.request_id, world_request_status::answered, &reply, nullptr);
+		request_outcome outcome;
+		outcome.status = world_request_status::answered;
+		outcome.list = std::move(reply);
+		finish(head.request_id, std::move(outcome));
 	}
 
 	void world_link_service::on_change_response(const std::shared_ptr<peer>& state, hb::net::connection& link, const hb::net::frame& received)
@@ -325,7 +377,61 @@ namespace hb::server::login
 		case answer_check::matched:
 			break;
 		}
-		finish(response.request_id, world_request_status::answered, nullptr, &response.result);
+		request_outcome outcome;
+		outcome.status = world_request_status::answered;
+		outcome.change = response.result;
+		finish(response.request_id, std::move(outcome));
+	}
+
+	void world_link_service::on_grant_response(const std::shared_ptr<peer>& state, hb::net::connection& link, const hb::net::frame& received)
+	{
+		link::session_grant_response response{};
+		if (!hb::net::decode(received, response))
+		{
+			link.close(close_reason::protocol_error, "malformed session_grant_response");
+			return;
+		}
+		switch (check_answer(link, response.request_id, message_id::link_session_grant_response))
+		{
+		case answer_check::unknown:
+			log::debug("world {}: late grant answer for request {} dropped", state->world, response.request_id);
+			return;
+		case answer_check::mismatched:
+			link.close(close_reason::protocol_error, "session_grant_response for a request it was not sent");
+			return;
+		case answer_check::matched:
+			break;
+		}
+		request_outcome outcome;
+		outcome.status = world_request_status::answered;
+		outcome.grant = response.result;
+		finish(response.request_id, std::move(outcome));
+	}
+
+	void world_link_service::on_session_started(const std::shared_ptr<peer>& state, hb::net::connection& link, const hb::net::frame& received)
+	{
+		link::session_started started{};
+		if (!hb::net::decode(received, started))
+		{
+			link.close(close_reason::protocol_error, "malformed session_started");
+			return;
+		}
+		if (m_online.on_started(state->world, started.account_id, started.character.view()) == online_registry::start_verdict::held_elsewhere)
+		{
+			// The claiming World must drop the session it just started; the holder keeps the account.
+			(void)link.send(link::kick_account{ started.account_id, link::kick_reason::forced_login_elsewhere });
+		}
+	}
+
+	void world_link_service::on_session_ended(const std::shared_ptr<peer>& state, hb::net::connection& link, const hb::net::frame& received)
+	{
+		link::session_ended ended{};
+		if (!hb::net::decode(received, ended))
+		{
+			link.close(close_reason::protocol_error, "malformed session_ended");
+			return;
+		}
+		m_online.on_ended(state->world, ended.account_id);
 	}
 
 	const allowed_world* world_link_service::find_world(std::string_view name) const
@@ -398,10 +504,13 @@ namespace hb::server::login
 			on_change_response(state, link, received);
 			return;
 		case message_id::link_session_grant_response:
+			on_grant_response(state, link, received);
+			return;
 		case message_id::link_session_started:
+			on_session_started(state, link, received);
+			return;
 		case message_id::link_session_ended:
-			// Session traffic is handled from LOGIN-008 on.
-			log::debug("world {}: message 0x{:04x} not handled yet", state->world, id);
+			on_session_ended(state, link, received);
 			return;
 		default:
 			link.close(close_reason::protocol_error, std::format("unexpected message 0x{:04x} on the world link", id));
@@ -454,6 +563,8 @@ namespace hb::server::login
 			entry = world_link_status{};
 			entry.state = link_state::live;
 			entry.max_players = request.max_players;
+			entry.client_host = std::string(request.client_host.view());
+			entry.client_port = request.client_port;
 		}
 		link.set_deadline(std::chrono::milliseconds::zero());  // registered: heartbeats keep it alive now
 		state->registered = true;
@@ -500,6 +611,10 @@ namespace hb::server::login
 			if (live != m_live.end())
 				m_live.erase(live);
 		}
+		// Every account this World held is offline now (plan sect. 5.3); a re-register announces the live ones again.
+		const std::size_t dropped = m_online.world_lost(state->world);
+		if (dropped != 0)
+			log::info("world {}: {} account(s) set offline", state->world, dropped);
 		const auto write = reason == close_reason::shutdown ? log::level::info : log::level::warning;
 		log::write(write, "world {} link lost: {}{}{}", state->world, hb::net::to_string(reason), detail.empty() ? "" : ", ",
 			detail);

@@ -95,6 +95,8 @@
 		<ClCompile Include="src\world_link.cpp" />
 		<ClCompile Include="src\client_listener.cpp" />
 		<ClCompile Include="src\authenticator.cpp" />
+		<ClCompile Include="src\online_accounts.cpp" />
+		<ClCompile Include="src\session_tickets.cpp" />
 	</ItemGroup>
 	<ItemGroup>
 		<ClInclude Include="src\login_application.h" />
@@ -123,6 +125,8 @@
 		<ClInclude Include="src\world_link.h" />
 		<ClInclude Include="src\client_listener.h" />
 		<ClInclude Include="src\authenticator.h" />
+		<ClInclude Include="src\online_accounts.h" />
+		<ClInclude Include="src\session_tickets.h" />
 		<ClInclude Include="src\character_rules.h" />
 		<ClInclude Include="src\worker_pool.h" />
 		<ClInclude Include="..\shared\protocol\field_checks.h" />

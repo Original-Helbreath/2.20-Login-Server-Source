@@ -1,6 +1,6 @@
-## Broker characters through the World
+## Hand players off to the World
 
 **Added**
-- After logging in, players see their characters and can create and delete them; the World server holds the characters.
+- Choosing a character sends you on to the World server, and logging in elsewhere can disconnect the old session.
 
-Summary: Character select works through the Login server (2026-10-27)
+Summary: Entering the game is handed from the Login server to the World (2026-10-27)
