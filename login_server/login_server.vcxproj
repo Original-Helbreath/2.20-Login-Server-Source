@@ -39,6 +39,9 @@
 		<OutDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</OutDir>
 		<IntDir>$(SolutionDir)build\obj\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
 	</PropertyGroup>
+	<PropertyGroup>
+		<ExternalIncludePath>$(SolutionDir)shared\third_party\asio\include;$(ExternalIncludePath)</ExternalIncludePath>
+	</PropertyGroup>
 	<ItemDefinitionGroup>
 		<ClCompile>
 			<WarningLevel>Level4</WarningLevel>
@@ -47,8 +50,8 @@
 			<ConformanceMode>true</ConformanceMode>
 			<LanguageStandard>stdcpp20</LanguageStandard>
 			<AdditionalOptions>/utf-8 /Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
-			<AdditionalIncludeDirectories>$(ProjectDir)src;$(SolutionDir)shared\protocol;$(SolutionDir)third_party\nlohmann_json\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-			<PreprocessorDefinitions>_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+			<AdditionalIncludeDirectories>$(ProjectDir)src;$(SolutionDir)shared\protocol;$(SolutionDir)shared\log;$(SolutionDir)shared\net;$(SolutionDir)third_party\nlohmann_json\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+			<PreprocessorDefinitions>_CONSOLE;ASIO_STANDALONE;ASIO_NO_DEPRECATED;_WIN32_WINNT=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
 		</ClCompile>
 		<Link>
 			<SubSystem>Console</SubSystem>
@@ -75,9 +78,6 @@
 		<ClCompile Include="src\main.cpp" />
 		<ClCompile Include="src\login_application.cpp" />
 		<ClCompile Include="src\config.cpp" />
-		<ClCompile Include="src\log.cpp" />
-		<ClCompile Include="src\console_win32.cpp" />
-		<ClCompile Include="src\console_posix.cpp" />
 		<ClCompile Include="src\account_service.cpp" />
 		<ClCompile Include="src\database.cpp" />
 		<ClCompile Include="src\hex.cpp" />
@@ -86,12 +86,18 @@
 		<ClCompile Include="src\private_file_win32.cpp" />
 		<ClCompile Include="src\private_file_posix.cpp" />
 		<ClCompile Include="..\shared\protocol\frame_codec.cpp" />
+		<ClCompile Include="..\shared\log\log.cpp" />
+		<ClCompile Include="..\shared\log\console_win32.cpp" />
+		<ClCompile Include="..\shared\log\console_posix.cpp" />
+		<ClCompile Include="..\shared\net\connection.cpp" />
+		<ClCompile Include="..\shared\net\server.cpp" />
+		<ClCompile Include="..\shared\net\client.cpp" />
+		<ClCompile Include="src\world_link.cpp" />
+		<ClCompile Include="src\client_listener.cpp" />
 	</ItemGroup>
 	<ItemGroup>
 		<ClInclude Include="src\login_application.h" />
 		<ClInclude Include="src\config.h" />
-		<ClInclude Include="src\log.h" />
-		<ClInclude Include="src\console.h" />
 		<ClInclude Include="src\account_service.h" />
 		<ClInclude Include="src\database.h" />
 		<ClInclude Include="src\entities.h" />
@@ -106,6 +112,16 @@
 		<ClInclude Include="..\shared\protocol\frame_header.h" />
 		<ClInclude Include="..\shared\protocol\common_types.h" />
 		<ClInclude Include="..\shared\protocol\frame_codec.h" />
+		<ClInclude Include="..\shared\log\log.h" />
+		<ClInclude Include="..\shared\log\console.h" />
+		<ClInclude Include="..\shared\net\asio_config.h" />
+		<ClInclude Include="..\shared\net\connection.h" />
+		<ClInclude Include="..\shared\net\server.h" />
+		<ClInclude Include="..\shared\net\client.h" />
+		<ClInclude Include="..\shared\net\periodic_timer.h" />
+		<ClInclude Include="src\world_link.h" />
+		<ClInclude Include="src\client_listener.h" />
+		<ClInclude Include="src\worker_pool.h" />
 		<ClInclude Include="..\shared\protocol\field_checks.h" />
 		<ClInclude Include="..\shared\protocol\message_id.h" />
 		<ClInclude Include="..\shared\protocol\login_messages.h" />

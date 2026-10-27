@@ -32,15 +32,6 @@
 		<ClCompile Include="src\config.cpp">
 			<Filter>application</Filter>
 		</ClCompile>
-		<ClCompile Include="src\log.cpp">
-			<Filter>application</Filter>
-		</ClCompile>
-		<ClCompile Include="src\console_win32.cpp">
-			<Filter>application</Filter>
-		</ClCompile>
-		<ClCompile Include="src\console_posix.cpp">
-			<Filter>application</Filter>
-		</ClCompile>
 		<ClCompile Include="src\hex.cpp">
 			<Filter>engine</Filter>
 		</ClCompile>
@@ -59,6 +50,30 @@
 		<ClCompile Include="src\private_file_posix.cpp">
 			<Filter>engine\security</Filter>
 		</ClCompile>
+		<ClCompile Include="..\shared\log\log.cpp">
+			<Filter>engine\network</Filter>
+		</ClCompile>
+		<ClCompile Include="..\shared\log\console_win32.cpp">
+			<Filter>engine\network</Filter>
+		</ClCompile>
+		<ClCompile Include="..\shared\log\console_posix.cpp">
+			<Filter>engine\network</Filter>
+		</ClCompile>
+		<ClCompile Include="..\shared\net\connection.cpp">
+			<Filter>engine\network</Filter>
+		</ClCompile>
+		<ClCompile Include="..\shared\net\server.cpp">
+			<Filter>engine\network</Filter>
+		</ClCompile>
+		<ClCompile Include="..\shared\net\client.cpp">
+			<Filter>engine\network</Filter>
+		</ClCompile>
+		<ClCompile Include="src\world_link.cpp">
+			<Filter>application</Filter>
+		</ClCompile>
+		<ClCompile Include="src\client_listener.cpp">
+			<Filter>application</Filter>
+		</ClCompile>
 		<ClCompile Include="..\shared\protocol\frame_codec.cpp">
 			<Filter>engine\network</Filter>
 		</ClCompile>
@@ -69,12 +84,6 @@
 	<ItemGroup>
 		<ClInclude Include="src\login_application.h" />
 		<ClInclude Include="src\config.h">
-			<Filter>application</Filter>
-		</ClInclude>
-		<ClInclude Include="src\log.h">
-			<Filter>application</Filter>
-		</ClInclude>
-		<ClInclude Include="src\console.h">
 			<Filter>application</Filter>
 		</ClInclude>
 		<ClInclude Include="src\hex.h">
@@ -112,6 +121,36 @@
 		</ClInclude>
 		<ClInclude Include="..\shared\protocol\common_types.h">
 			<Filter>helbreath\protocol</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\log\log.h">
+			<Filter>engine\network</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\log\console.h">
+			<Filter>engine\network</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\net\asio_config.h">
+			<Filter>engine\network</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\net\connection.h">
+			<Filter>engine\network</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\net\server.h">
+			<Filter>engine\network</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\net\client.h">
+			<Filter>engine\network</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\net\periodic_timer.h">
+			<Filter>engine\network</Filter>
+		</ClInclude>
+		<ClInclude Include="src\world_link.h">
+			<Filter>application</Filter>
+		</ClInclude>
+		<ClInclude Include="src\client_listener.h">
+			<Filter>application</Filter>
+		</ClInclude>
+		<ClInclude Include="src\worker_pool.h">
+			<Filter>application</Filter>
 		</ClInclude>
 		<ClInclude Include="..\shared\protocol\frame_codec.h">
 			<Filter>engine\network</Filter>

@@ -113,12 +113,15 @@ namespace hb::server::login
 
 		void read_listen(const nlohmann::json& root)
 		{
-			const nlohmann::json* listen = section(root, "listen", { "bind_address", "client_port", "world_port" });
+			const nlohmann::json* listen = section(root, "listen",
+				{ "bind_address", "client_port", "world_port", "max_client_connections", "max_world_connections" });
 			if (!listen)
 				return;
 			read_string(*listen, "bind_address", m_config.listen.bind_address);
 			read_number(*listen, "client_port", m_config.listen.client_port, min_port);
 			read_number(*listen, "world_port", m_config.listen.world_port, min_port);
+			read_number(*listen, "max_client_connections", m_config.listen.max_client_connections, min_connections);
+			read_number(*listen, "max_world_connections", m_config.listen.max_world_connections, min_connections);
 		}
 
 		void read_worlds(const nlohmann::json& root)

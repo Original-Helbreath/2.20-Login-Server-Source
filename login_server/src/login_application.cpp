@@ -1,6 +1,16 @@
 #include "login_application.h"
 
 #include "account_service.h"
+#include "asio_config.h"
+#include "client_listener.h"
+#include "worker_pool.h"
+#include "world_link.h"
+
+#include <asio/signal_set.hpp>
+
+#include <csignal>
+#include <string>
+#include <utility>
 #include "database.h"
 #include "log.h"
 #include "password_hasher.h"
@@ -48,7 +58,48 @@ namespace hb::server::login
 			return false;
 		}
 
-		// Listeners arrive with the networking milestone; until then the server stops after startup.
+		return serve();
+	}
+
+	bool login_application::serve()
+	{
+		std::string error;
+		world_link_options link_options;
+		if (!make_world_link_options(m_config, link_options, error))
+		{
+			log::error("config rejected: {}", error);
+			return false;
+		}
+
+		// One network io_context on this thread; slow jobs go to the workers (plan sect. 5.1).
+		asio::io_context network;
+		worker_pool workers(m_config.database.pool_size);
+		world_link_service world_links(network, std::move(link_options));
+		client_listener clients(network, make_client_listener_options(m_config));
+		if (!world_links.start(error) || !clients.start(error))
+		{
+			log::error("listen failed: {}", error);
+			world_links.stop();
+			clients.stop();
+			return false;
+		}
+
+		asio::signal_set signals(network, SIGINT, SIGTERM);
+		signals.async_wait([&](const asio::error_code& wait_error, int signal) {
+			if (wait_error)
+				return;
+			log::info("signal {} received, shutting down", signal);
+			clients.stop();
+			world_links.stop();
+			network.stop();
+		});
+
+		log::info("login server running with {} worker threads; Ctrl+C stops it", workers.size());
+		network.run();
+		// Run the closes the shutdown posted, so every session and link logs its end.
+		network.restart();
+		network.poll();
+		workers.stop();
 		log::info("login server stopped");
 		return true;
 	}

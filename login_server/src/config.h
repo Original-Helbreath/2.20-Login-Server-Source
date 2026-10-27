@@ -14,6 +14,7 @@ namespace hb::server::login
 {
 	constexpr std::size_t link_key_hex_digits = 64;
 	constexpr std::uint64_t min_port = 1;
+	constexpr std::uint64_t min_connections = 1;
 	constexpr std::uint64_t min_seconds = 1;
 	constexpr std::uint64_t min_body_bytes = 64;
 	constexpr std::uint64_t min_pool_size = 1;
@@ -25,6 +26,9 @@ namespace hb::server::login
 		std::string bind_address = "0.0.0.0";
 		std::uint16_t client_port = 2848;
 		std::uint16_t world_port = 3840;
+		// Open connections each listener holds at most; one more is closed on accept.
+		std::uint32_t max_client_connections = 1000;
+		std::uint32_t max_world_connections = 8;
 	};
 
 	struct world_entry

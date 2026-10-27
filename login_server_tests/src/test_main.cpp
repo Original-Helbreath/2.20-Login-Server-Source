@@ -8,6 +8,11 @@
 #include "pepper_store.h"
 #include "test_runner.h"
 
+#if defined(_MSC_VER)
+#include <crtdbg.h>
+#include <cstdlib>
+#endif
+
 #include <filesystem>
 #include <format>
 #include <string>
@@ -162,6 +167,16 @@ namespace tests
 
 int main()
 {
+#if defined(_MSC_VER)
+	// A failed assert or abort reports to stderr and exits; a headless test run never waits on a dialog.
+	_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+	for (const int kind : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT })
+	{
+		_CrtSetReportMode(kind, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
+		_CrtSetReportFile(kind, _CRTDBG_FILE_STDERR);
+		(void)kind;  // the two calls above compile to nothing in Release
+	}
+#endif
 	hb::log::initialize("login_server_tests", "tests");
 	tests::runner t;
 	const std::filesystem::path folder = "test_data";
@@ -176,6 +191,7 @@ int main()
 		tests::account_tests(t, folder);
 		tests::protocol_tests(t);
 		tests::message_tests(t);
+		tests::network_tests(t);
 	}
 	catch (const std::exception& failure)
 	{
