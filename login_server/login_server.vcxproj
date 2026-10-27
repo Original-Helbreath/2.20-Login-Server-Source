@@ -131,6 +131,7 @@
 		<ClInclude Include="src\worker_pool.h" />
 		<ClInclude Include="..\shared\protocol\field_checks.h" />
 		<ClInclude Include="..\shared\protocol\message_id.h" />
+		<ClInclude Include="..\shared\protocol\world_messages.h" />
 		<ClInclude Include="..\shared\protocol\login_messages.h" />
 		<ClInclude Include="..\shared\protocol\link_messages.h" />
 		<ClInclude Include="..\shared\protocol\message_codec.h" />

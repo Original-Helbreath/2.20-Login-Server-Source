@@ -7,6 +7,7 @@
 #include "message_codec.h"
 #include "message_id.h"
 #include "test_runner.h"
+#include "world_messages.h"
 
 #include <algorithm>
 #include <array>
@@ -103,8 +104,13 @@ namespace tests
 			t.check(direction_of(0x0207) == message_direction::login_to_client, "0x0207 is Login -> client");
 			t.check(direction_of(0x0308) == message_direction::world_to_login, "0x0308 is World -> Login");
 			t.check(direction_of(0x0408) == message_direction::login_to_world, "0x0408 is Login -> World");
-			t.check(!is_known(0x0000) && !is_known(0x0107) && !is_known(0x0407) && !is_known(0x0501) && !is_known(0xFFFF),
+			t.check(direction_of(0x0501) == message_direction::client_to_world, "0x0501 is client -> World");
+			t.check(direction_of(0x0502) == message_direction::world_to_client, "0x0502 is World -> client");
+			t.check(is_known(0x0501) && is_known(0x0502), "the handoff ids are known");
+			t.check(!is_known(0x0000) && !is_known(0x0107) && !is_known(0x0407) && !is_known(0x0500) && !is_known(0x0503) && !is_known(0xFFFF),
 				"undefined ids are unknown");
+			t.check(to_wire(world::world_enter_request::id) == 0x0501 && to_wire(world::world_enter_response::id) == 0x0502,
+				"the handoff structs carry their plan ids");
 			t.check(to_wire(login::enter_game_response::id) == 0x0207 && to_wire(link::kick_account::id) == 0x0406,
 				"structs carry their plan ids");
 		}
@@ -167,6 +173,31 @@ namespace tests
 			bytes.clear();
 			t.check(!encode_heartbeat(message_id::login_request, beat, test_max_body, bytes) && bytes.empty(),
 				"heartbeat refuses a non-heartbeat id");
+		}
+
+		void world_round_trip_tests(runner& t)
+		{
+			using namespace hb::net::world;
+
+			t.check(round_trips(world_enter_request{ pattern(5), text<16>("Hero") }), "world_enter_request round-trips");
+			t.check(round_trips(world_enter_response{ world_enter_result::shutting_down }), "world_enter_response round-trips");
+			for (std::uint8_t r = 0; r <= 4; ++r)
+				t.check(accepted(world_enter_response{ static_cast<world_enter_result>(r) }), std::format("world_enter_result {} accepted", r));
+			t.check(!accepted(world_enter_response{ static_cast<world_enter_result>(5) }), "world_enter_result 5 refused");
+			t.check(!accepted(world_enter_request{ pattern(5), hidden_text<16>("Hero") }), "world_enter_request with a non-zero-padded character refused");
+
+			// Wrong size and wrong id.
+			std::vector<std::byte> bytes;
+			frame in;
+			world_enter_request wrong_size{};
+			t.check(encode(world_enter_response{ world_enter_result::ok }, test_max_body, bytes)
+					&& decode_frame(bytes, test_max_body, in) == frame_error::none && !decode(in, wrong_size),
+				"a one-byte body is not a world_enter_request");
+			world_enter_response wrong_id{};
+			bytes.clear();
+			t.check(encode(world_enter_request{ pattern(5), text<16>("Hero") }, test_max_body, bytes) && decode_frame(bytes, test_max_body, in) == frame_error::none
+					&& !decode(in, wrong_id),
+				"a world_enter_request body is not a world_enter_response");
 		}
 
 		void rejection_tests(runner& t)
@@ -334,6 +365,7 @@ namespace tests
 		id_tests(t);
 		login_round_trip_tests(t);
 		link_round_trip_tests(t);
+		world_round_trip_tests(t);
 		rejection_tests(t);
 		character_list_tests(t);
 	}
