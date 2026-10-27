@@ -47,7 +47,7 @@
 			<ConformanceMode>true</ConformanceMode>
 			<LanguageStandard>stdcpp20</LanguageStandard>
 			<AdditionalOptions>/utf-8 /Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
-			<AdditionalIncludeDirectories>$(ProjectDir)src;$(SolutionDir)third_party\nlohmann_json\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+			<AdditionalIncludeDirectories>$(ProjectDir)src;$(SolutionDir)shared\protocol;$(SolutionDir)third_party\nlohmann_json\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
 			<PreprocessorDefinitions>_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
 		</ClCompile>
 		<Link>
@@ -85,6 +85,7 @@
 		<ClCompile Include="src\pepper_store.cpp" />
 		<ClCompile Include="src\private_file_win32.cpp" />
 		<ClCompile Include="src\private_file_posix.cpp" />
+		<ClCompile Include="..\shared\protocol\frame_codec.cpp" />
 	</ItemGroup>
 	<ItemGroup>
 		<ClInclude Include="src\login_application.h" />
@@ -98,6 +99,13 @@
 		<ClInclude Include="src\password_hasher.h" />
 		<ClInclude Include="src\pepper_store.h" />
 		<ClInclude Include="src\private_file.h" />
+		<ClInclude Include="..\shared\protocol\wire.h" />
+		<ClInclude Include="..\shared\protocol\span_reader.h" />
+		<ClInclude Include="..\shared\protocol\span_writer.h" />
+		<ClInclude Include="..\shared\protocol\fixed_string.h" />
+		<ClInclude Include="..\shared\protocol\frame_header.h" />
+		<ClInclude Include="..\shared\protocol\common_types.h" />
+		<ClInclude Include="..\shared\protocol\frame_codec.h" />
 	</ItemGroup>
 	<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

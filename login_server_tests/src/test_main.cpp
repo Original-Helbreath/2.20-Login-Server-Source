@@ -1,11 +1,12 @@
-// Tests for the Login server's account and password code, run against a throwaway database.
-// Exit code 0 when every check passes.
+// Tests for the Login server's account and password code, run against a throwaway database, and for the
+// protocol framing layer. Exit code 0 when every check passes.
 #include "account_service.h"
 #include "database.h"
 #include "entities.h"
 #include "log.h"
 #include "password_hasher.h"
 #include "pepper_store.h"
+#include "test_runner.h"
 
 #include <filesystem>
 #include <format>
@@ -19,38 +20,6 @@ namespace tests
 	// Cheap enough to run many times; the production presets are checked separately.
 	constexpr argon2_cost test_cost{ 1, 8192, 1 };
 	constexpr argon2_cost raised_cost{ 2, 8192, 1 };
-
-	class runner
-	{
-	public:
-		void check(bool condition, std::string_view name)
-		{
-			++m_total;
-			if (condition)
-				return;
-			++m_failed;
-			hb::log::error("FAIL: {}", name);
-		}
-
-		bool passed() const
-		{
-			return m_failed == 0;
-		}
-
-		int total() const
-		{
-			return m_total;
-		}
-
-		int failed() const
-		{
-			return m_failed;
-		}
-
-	private:
-		int m_total = 0;
-		int m_failed = 0;
-	};
 
 	pepper_key make_pepper(std::uint8_t fill)
 	{
@@ -205,6 +174,7 @@ int main()
 	{
 		tests::hasher_tests(t);
 		tests::account_tests(t, folder);
+		tests::protocol_tests(t);
 	}
 	catch (const std::exception& failure)
 	{

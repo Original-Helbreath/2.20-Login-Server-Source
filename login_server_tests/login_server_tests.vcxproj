@@ -47,7 +47,7 @@
 			<ConformanceMode>true</ConformanceMode>
 			<LanguageStandard>stdcpp20</LanguageStandard>
 			<AdditionalOptions>/utf-8 /Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
-			<AdditionalIncludeDirectories>$(SolutionDir)login_server\src;$(SolutionDir)third_party\nlohmann_json\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+			<AdditionalIncludeDirectories>$(SolutionDir)login_server\src;$(SolutionDir)shared\protocol;$(SolutionDir)third_party\nlohmann_json\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
 			<PreprocessorDefinitions>_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
 		</ClCompile>
 		<Link>
@@ -73,6 +73,8 @@
 	</ItemDefinitionGroup>
 	<ItemGroup>
 		<ClCompile Include="src\test_main.cpp" />
+		<ClCompile Include="src\protocol_tests.cpp" />
+		<ClCompile Include="..\shared\protocol\frame_codec.cpp" />
 		<ClCompile Include="..\login_server\src\log.cpp" />
 		<ClCompile Include="..\login_server\src\console_win32.cpp" />
 		<ClCompile Include="..\login_server\src\console_posix.cpp" />
@@ -83,6 +85,9 @@
 		<ClCompile Include="..\login_server\src\pepper_store.cpp" />
 		<ClCompile Include="..\login_server\src\private_file_win32.cpp" />
 		<ClCompile Include="..\login_server\src\private_file_posix.cpp" />
+	</ItemGroup>
+	<ItemGroup>
+		<ClInclude Include="src\test_runner.h" />
 	</ItemGroup>
 	<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

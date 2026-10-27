@@ -13,6 +13,15 @@
 		<Filter Include="engine\security">
 			<UniqueIdentifier>{2C9F6A84-1D3B-4E70-8B25-D4E6F8A1C204}</UniqueIdentifier>
 		</Filter>
+		<Filter Include="engine\network">
+			<UniqueIdentifier>{3B7C2E91-4A5D-4F16-8C2B-9D1E6A4F7C06}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="engine\wire">
+			<UniqueIdentifier>{6E1D4A28-9B3C-4E57-A2F8-1C5B7D9E3A07}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="helbreath\protocol">
+			<UniqueIdentifier>{9A2F5C63-7D8E-4B31-B6A4-2E0C8F1D5B08}</UniqueIdentifier>
+		</Filter>
 		<Filter Include="helbreath">
 			<UniqueIdentifier>{7A4E1B95-3C6D-4F82-9E17-B5C8D0E2F305}</UniqueIdentifier>
 		</Filter>
@@ -50,6 +59,9 @@
 		<ClCompile Include="src\private_file_posix.cpp">
 			<Filter>engine\security</Filter>
 		</ClCompile>
+		<ClCompile Include="..\shared\protocol\frame_codec.cpp">
+			<Filter>engine\network</Filter>
+		</ClCompile>
 		<ClCompile Include="src\account_service.cpp">
 			<Filter>helbreath</Filter>
 		</ClCompile>
@@ -82,6 +94,27 @@
 		</ClInclude>
 		<ClInclude Include="src\pepper_store.h">
 			<Filter>engine\security</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\protocol\wire.h">
+			<Filter>engine\wire</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\protocol\span_reader.h">
+			<Filter>engine\wire</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\protocol\span_writer.h">
+			<Filter>engine\wire</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\protocol\fixed_string.h">
+			<Filter>engine\wire</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\protocol\frame_header.h">
+			<Filter>engine\network</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\protocol\common_types.h">
+			<Filter>helbreath\protocol</Filter>
+		</ClInclude>
+		<ClInclude Include="..\shared\protocol\frame_codec.h">
+			<Filter>engine\network</Filter>
 		</ClInclude>
 		<ClInclude Include="src\account_service.h">
 			<Filter>helbreath</Filter>

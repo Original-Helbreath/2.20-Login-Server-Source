@@ -1,12 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 	<ItemGroup>
+		<Filter Include="protocol">
+			<UniqueIdentifier>{C4E8A1B7-2F6D-4A93-8E15-7B3D9F0A2C09}</UniqueIdentifier>
+		</Filter>
 		<Filter Include="login_server">
 			<UniqueIdentifier>{4F1A6C37-9B2E-4D85-A3C0-E6F8B1D4A706}</UniqueIdentifier>
 		</Filter>
 	</ItemGroup>
 	<ItemGroup>
 		<ClCompile Include="src\test_main.cpp" />
+		<ClCompile Include="src\protocol_tests.cpp" />
+		<ClCompile Include="..\shared\protocol\frame_codec.cpp">
+			<Filter>protocol</Filter>
+		</ClCompile>
 		<ClCompile Include="..\login_server\src\log.cpp">
 			<Filter>login_server</Filter>
 		</ClCompile>
@@ -37,5 +44,8 @@
 		<ClCompile Include="..\login_server\src\private_file_posix.cpp">
 			<Filter>login_server</Filter>
 		</ClCompile>
+	</ItemGroup>
+	<ItemGroup>
+		<ClInclude Include="src\test_runner.h" />
 	</ItemGroup>
 </Project>
