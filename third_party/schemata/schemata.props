@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Import from a .vcxproj to use Schemata with SQLite: #include <schemata/schemata.h> and <schemata/sqlite.h>.
+     Prebuilt archives; refresh.md records how they were made. Debug archives carry a 'd' postfix. -->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	<ItemDefinitionGroup>
+		<ClCompile>
+			<AdditionalIncludeDirectories>$(SolutionDir)third_party\schemata\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+		</ClCompile>
+		<Link>
+			<AdditionalLibraryDirectories>$(SolutionDir)third_party\schemata\lib\x64\$(Configuration.ToLower());%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+		</Link>
+	</ItemDefinitionGroup>
+	<ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+		<Link>
+			<AdditionalDependencies>sch_sqlited.lib;sch_cored.lib;sqlite3_amalgamationd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+		</Link>
+	</ItemDefinitionGroup>
+	<ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+		<Link>
+			<AdditionalDependencies>sch_sqlite.lib;sch_core.lib;sqlite3_amalgamation.lib;%(AdditionalDependencies)</AdditionalDependencies>
+		</Link>
+	</ItemDefinitionGroup>
+</Project>

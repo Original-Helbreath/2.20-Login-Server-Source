@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	<ItemGroup>
+		<Filter Include="login_server">
+			<UniqueIdentifier>{4F1A6C37-9B2E-4D85-A3C0-E6F8B1D4A706}</UniqueIdentifier>
+		</Filter>
+	</ItemGroup>
+	<ItemGroup>
+		<ClCompile Include="src\test_main.cpp" />
+		<ClCompile Include="..\login_server\src\log.cpp">
+			<Filter>login_server</Filter>
+		</ClCompile>
+		<ClCompile Include="..\login_server\src\console_win32.cpp">
+			<Filter>login_server</Filter>
+		</ClCompile>
+		<ClCompile Include="..\login_server\src\console_posix.cpp">
+			<Filter>login_server</Filter>
+		</ClCompile>
+		<ClCompile Include="..\login_server\src\account_service.cpp">
+			<Filter>login_server</Filter>
+		</ClCompile>
+		<ClCompile Include="..\login_server\src\database.cpp">
+			<Filter>login_server</Filter>
+		</ClCompile>
+		<ClCompile Include="..\login_server\src\hex.cpp">
+			<Filter>login_server</Filter>
+		</ClCompile>
+		<ClCompile Include="..\login_server\src\password_hasher.cpp">
+			<Filter>login_server</Filter>
+		</ClCompile>
+		<ClCompile Include="..\login_server\src\pepper_store.cpp">
+			<Filter>login_server</Filter>
+		</ClCompile>
+		<ClCompile Include="..\login_server\src\private_file_win32.cpp">
+			<Filter>login_server</Filter>
+		</ClCompile>
+		<ClCompile Include="..\login_server\src\private_file_posix.cpp">
+			<Filter>login_server</Filter>
+		</ClCompile>
+	</ItemGroup>
+</Project>

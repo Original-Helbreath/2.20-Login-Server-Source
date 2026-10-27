@@ -4,6 +4,18 @@
 		<Filter Include="application">
 			<UniqueIdentifier>{0B6E2F41-7C3A-4D19-8E52-A1F4C6D2B301}</UniqueIdentifier>
 		</Filter>
+		<Filter Include="engine">
+			<UniqueIdentifier>{5D8A1C72-2E4F-4B60-9A13-C7E5F2B48A02}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="engine\persistence">
+			<UniqueIdentifier>{8E2B4D13-6F7A-4C58-B1E9-3A0D5C7F9B03}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="engine\security">
+			<UniqueIdentifier>{2C9F6A84-1D3B-4E70-8B25-D4E6F8A1C204}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="helbreath">
+			<UniqueIdentifier>{7A4E1B95-3C6D-4F82-9E17-B5C8D0E2F305}</UniqueIdentifier>
+		</Filter>
 	</ItemGroup>
 	<ItemGroup>
 		<ClCompile Include="src\main.cpp" />
@@ -20,6 +32,27 @@
 		<ClCompile Include="src\console_posix.cpp">
 			<Filter>application</Filter>
 		</ClCompile>
+		<ClCompile Include="src\hex.cpp">
+			<Filter>engine</Filter>
+		</ClCompile>
+		<ClCompile Include="src\database.cpp">
+			<Filter>engine\persistence</Filter>
+		</ClCompile>
+		<ClCompile Include="src\password_hasher.cpp">
+			<Filter>engine\security</Filter>
+		</ClCompile>
+		<ClCompile Include="src\pepper_store.cpp">
+			<Filter>engine\security</Filter>
+		</ClCompile>
+		<ClCompile Include="src\private_file_win32.cpp">
+			<Filter>engine\security</Filter>
+		</ClCompile>
+		<ClCompile Include="src\private_file_posix.cpp">
+			<Filter>engine\security</Filter>
+		</ClCompile>
+		<ClCompile Include="src\account_service.cpp">
+			<Filter>helbreath</Filter>
+		</ClCompile>
 	</ItemGroup>
 	<ItemGroup>
 		<ClInclude Include="src\login_application.h" />
@@ -31,6 +64,27 @@
 		</ClInclude>
 		<ClInclude Include="src\console.h">
 			<Filter>application</Filter>
+		</ClInclude>
+		<ClInclude Include="src\hex.h">
+			<Filter>engine</Filter>
+		</ClInclude>
+		<ClInclude Include="src\database.h">
+			<Filter>engine\persistence</Filter>
+		</ClInclude>
+		<ClInclude Include="src\entities.h">
+			<Filter>engine\persistence</Filter>
+		</ClInclude>
+		<ClInclude Include="src\private_file.h">
+			<Filter>engine\security</Filter>
+		</ClInclude>
+		<ClInclude Include="src\password_hasher.h">
+			<Filter>engine\security</Filter>
+		</ClInclude>
+		<ClInclude Include="src\pepper_store.h">
+			<Filter>engine\security</Filter>
+		</ClInclude>
+		<ClInclude Include="src\account_service.h">
+			<Filter>helbreath</Filter>
 		</ClInclude>
 	</ItemGroup>
 </Project>

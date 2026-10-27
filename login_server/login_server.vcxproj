@@ -32,6 +32,8 @@
 	<Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
 	<ImportGroup Label="PropertySheets">
 		<Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+		<Import Project="$(SolutionDir)third_party\schemata\schemata.props" />
+		<Import Project="$(SolutionDir)third_party\openssl.props" />
 	</ImportGroup>
 	<PropertyGroup>
 		<OutDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</OutDir>
@@ -76,12 +78,26 @@
 		<ClCompile Include="src\log.cpp" />
 		<ClCompile Include="src\console_win32.cpp" />
 		<ClCompile Include="src\console_posix.cpp" />
+		<ClCompile Include="src\account_service.cpp" />
+		<ClCompile Include="src\database.cpp" />
+		<ClCompile Include="src\hex.cpp" />
+		<ClCompile Include="src\password_hasher.cpp" />
+		<ClCompile Include="src\pepper_store.cpp" />
+		<ClCompile Include="src\private_file_win32.cpp" />
+		<ClCompile Include="src\private_file_posix.cpp" />
 	</ItemGroup>
 	<ItemGroup>
 		<ClInclude Include="src\login_application.h" />
 		<ClInclude Include="src\config.h" />
 		<ClInclude Include="src\log.h" />
 		<ClInclude Include="src\console.h" />
+		<ClInclude Include="src\account_service.h" />
+		<ClInclude Include="src\database.h" />
+		<ClInclude Include="src\entities.h" />
+		<ClInclude Include="src\hex.h" />
+		<ClInclude Include="src\password_hasher.h" />
+		<ClInclude Include="src\pepper_store.h" />
+		<ClInclude Include="src\private_file.h" />
 	</ItemGroup>
 	<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

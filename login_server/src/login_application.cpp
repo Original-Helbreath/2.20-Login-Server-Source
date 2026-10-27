@@ -1,6 +1,10 @@
 #include "login_application.h"
 
+#include "account_service.h"
+#include "database.h"
 #include "log.h"
+#include "password_hasher.h"
+#include "pepper_store.h"
 
 namespace hb::server::login
 {
@@ -18,7 +22,33 @@ namespace hb::server::login
 		log::set_level(m_config.log_level);
 		log_config();
 
-		// Listeners arrive with the networking milestone; LOGIN-001 stops after the config.
+		database db;
+		if (!db.open(m_config.database.path, m_config.database.pool_size, error))
+		{
+			log::error("database failed: {}", error);
+			return false;
+		}
+		std::int64_t account_count = 0;
+		if (!count_accounts(db, account_count, error))
+		{
+			log::error("database failed: {}", error);
+			return false;
+		}
+		pepper_store peppers;
+		if (!peppers.load_or_create(m_config.accounts.pepper_file, account_count == 0, error))
+		{
+			log::error("pepper file rejected: {}", error);
+			return false;
+		}
+		// The config validated the cost name, so the preset exists.
+		account_service accounts(db, peppers, *cost_from_name(m_config.accounts.password_hash_cost));
+		if (!accounts.verify_peppers(error))
+		{
+			log::error("pepper file rejected: {}", error);
+			return false;
+		}
+
+		// Listeners arrive with the networking milestone; until then the server stops after startup.
 		log::info("login server stopped");
 		return true;
 	}
@@ -29,7 +59,8 @@ namespace hb::server::login
 			m_config.listen.client_port, m_config.listen.world_port);
 		for (const world_entry& world : m_config.worlds)
 			log::info("world {} allowed from {}", world.name, world.allowed_address);
-		log::info("database {}, client account creation {}, password cost {}", m_config.database.path,
-			m_config.accounts.allows_client_account_creation ? "on" : "off", m_config.accounts.password_hash_cost);
+		log::info("database {} (pool {}), client account creation {}, password cost {}", m_config.database.path,
+			m_config.database.pool_size, m_config.accounts.allows_client_account_creation ? "on" : "off",
+			m_config.accounts.password_hash_cost);
 	}
 }

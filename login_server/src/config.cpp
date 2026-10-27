@@ -173,11 +173,13 @@ namespace hb::server::login
 
 		void read_accounts(const nlohmann::json& root)
 		{
-			const nlohmann::json* accounts = section(root, "accounts", { "allows_client_account_creation", "password_hash_cost" });
+			const nlohmann::json* accounts = section(root, "accounts",
+				{ "allows_client_account_creation", "password_hash_cost", "pepper_file" });
 			if (!accounts)
 				return;
 			read_bool(*accounts, "allows_client_account_creation", m_config.accounts.allows_client_account_creation);
 			read_string(*accounts, "password_hash_cost", m_config.accounts.password_hash_cost);
+			read_string(*accounts, "pepper_file", m_config.accounts.pepper_file);
 		}
 
 		void read_session(const nlohmann::json& root)
@@ -193,8 +195,13 @@ namespace hb::server::login
 
 		void read_database_and_log(const nlohmann::json& root)
 		{
-			if (const nlohmann::json* database = section(root, "database", { "path" }))
+			if (const nlohmann::json* database = section(root, "database", { "path", "pool_size" }))
+			{
 				read_string(*database, "path", m_config.database.path);
+				read_number(*database, "pool_size", m_config.database.pool_size, min_pool_size);
+				if (m_config.database.pool_size > max_pool_size)
+					fail(std::format("'pool_size' must be at most {}", max_pool_size));
+			}
 			const nlohmann::json* log_section = section(root, "log", { "level" });
 			if (!log_section)
 				return;

@@ -2,3 +2,5 @@ build/
 .vs/
 *.user
 *.log
+data/
+test_data/

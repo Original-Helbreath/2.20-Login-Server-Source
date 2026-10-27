@@ -16,6 +16,8 @@ namespace hb::server::login
 	constexpr std::uint64_t min_port = 1;
 	constexpr std::uint64_t min_seconds = 1;
 	constexpr std::uint64_t min_body_bytes = 64;
+	constexpr std::uint64_t min_pool_size = 1;
+	constexpr std::uint64_t max_pool_size = 64;
 	constexpr std::array<std::string_view, 3> password_hash_costs = { "interactive", "moderate", "sensitive" };
 
 	struct listen_config
@@ -41,8 +43,10 @@ namespace hb::server::login
 
 	struct accounts_config
 	{
-		bool allows_client_account_creation = false;
+		bool allows_client_account_creation = true;
 		std::string password_hash_cost = "moderate";
+		// The pepper key file: a secret kept outside players.db and the repo; created on first run.
+		std::string pepper_file = "data/pepper.json";
 	};
 
 	struct session_config
@@ -54,7 +58,11 @@ namespace hb::server::login
 
 	struct database_config
 	{
-		std::string path = "data/login.db";
+		// players.db is shared with the World server: Login owns accounts and login_events, World the
+		// character tables. gamedata.db and world.db are the World server's alone.
+		std::string path = "data/players.db";
+		// Schemata pool size; the worker thread count matches it (plan sect. 5.1).
+		std::uint32_t pool_size = 4;
 	};
 
 	struct login_config

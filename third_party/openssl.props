@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OpenSSL 3.5 LTS from the machine-wide install (slproweb full installer), shared by every project on the
+     machine. Override with the OPENSSL_ROOT_X64 environment variable. Links libcrypto only (passwords,
+     random bytes); libssl joins with TLS. The DLL is copied beside the exe after each build. -->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	<PropertyGroup>
+		<OpenSslRoot Condition="'$(OPENSSL_ROOT_X64)'!=''">$(OPENSSL_ROOT_X64)</OpenSslRoot>
+		<OpenSslRoot Condition="'$(OpenSslRoot)'==''">C:\Program Files\OpenSSL-Win64</OpenSslRoot>
+		<OpenSslRuntime Condition="'$(Configuration)'=='Debug'">MDd</OpenSslRuntime>
+		<OpenSslRuntime Condition="'$(Configuration)'!='Debug'">MD</OpenSslRuntime>
+	</PropertyGroup>
+	<ItemDefinitionGroup>
+		<ClCompile>
+			<AdditionalIncludeDirectories>$(OpenSslRoot)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+		</ClCompile>
+		<Link>
+			<AdditionalLibraryDirectories>$(OpenSslRoot)\lib\VC\x64\$(OpenSslRuntime);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+			<AdditionalDependencies>libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies>
+		</Link>
+		<PostBuildEvent>
+			<Command>copy /Y "$(OpenSslRoot)\bin\libcrypto-3-x64.dll" "$(OutDir)" &gt;nul</Command>
+		</PostBuildEvent>
+	</ItemDefinitionGroup>
+</Project>
