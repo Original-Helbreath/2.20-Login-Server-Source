@@ -33,6 +33,19 @@ namespace hb::server::login
 			const asio::ip::address parsed = asio::ip::make_address(allowed, error);
 			return !error && parsed == remote;
 		}
+
+		// Hands an outcome to the waiting client session on its own strand; never calls it inline.
+		void deliver(const asio::any_io_executor& to, character_list_done on_list, character_change_done on_change,
+			world_request_status status, character_list_reply list, hb::net::login::character_result change)
+		{
+			asio::post(to, [on_list = std::move(on_list), on_change = std::move(on_change), status, list = std::move(list),
+				change]() mutable {
+				if (on_list)
+					on_list(status, std::move(list));
+				else if (on_change)
+					on_change(status, change);
+			});
+		}
 	}
 
 	std::string_view to_string(link_state state)
@@ -57,6 +70,7 @@ namespace hb::server::login
 		options.listen.max_connections = config.listen.max_world_connections;
 		options.heartbeat_interval = std::chrono::seconds(config.protocol.heartbeat_seconds);
 		options.loss_timeout = options.heartbeat_interval * heartbeats_before_loss;
+		options.request_timeout = std::chrono::seconds(config.protocol.world_request_timeout_seconds);
 		options.worlds.clear();
 		for (const world_entry& entry : config.worlds)
 		{
@@ -110,6 +124,208 @@ namespace hb::server::login
 		std::scoped_lock lock(m_mutex);
 		const auto found = m_links.find(world);
 		return found == m_links.end() ? world_link_status{} : found->second;
+	}
+
+	bool world_link_service::knows_world(std::string_view world) const
+	{
+		return find_world(world) != nullptr;
+	}
+
+	bool world_link_service::is_live(std::string_view world) const
+	{
+		std::scoped_lock lock(m_mutex);
+		const auto found = m_links.find(world);
+		return found != m_links.end() && found->second.state == link_state::live;
+	}
+
+	std::size_t world_link_service::pending_count() const
+	{
+		std::scoped_lock lock(m_mutex);
+		return m_pending.size();
+	}
+
+	void world_link_service::request_character_list(std::string_view world, std::uint64_t account_id,
+		const asio::any_io_executor& reply_on, character_list_done done)
+	{
+		submit(world, link::character_list_request{ 0, account_id }, message_id::link_character_list_response, reply_on,
+			std::move(done), nullptr);
+	}
+
+	void world_link_service::request_create_character(std::string_view world, link::create_character_request request,
+		const asio::any_io_executor& reply_on, character_change_done done)
+	{
+		submit(world, request, message_id::link_character_change_response, reply_on, nullptr, std::move(done));
+	}
+
+	void world_link_service::request_delete_character(std::string_view world, link::delete_character_request request,
+		const asio::any_io_executor& reply_on, character_change_done done)
+	{
+		submit(world, request, message_id::link_character_change_response, reply_on, nullptr, std::move(done));
+	}
+
+	template <class Request>
+	void world_link_service::submit(std::string_view world, Request request, message_id answer, const asio::any_io_executor& reply_on,
+		character_list_done on_list, character_change_done on_change)
+	{
+		std::shared_ptr<hb::net::connection> link;
+		std::uint32_t id = 0;
+		{
+			std::scoped_lock lock(m_mutex);
+			const auto live = m_live.find(world);
+			if (live != m_live.end())
+				link = live->second.lock();
+			const auto status = m_links.find(world);
+			if (link && (!link->is_open() || status == m_links.end() || status->second.state != link_state::live))
+				link.reset();
+			if (link)
+			{
+				do
+				{
+					id = ++m_next_request_id;
+				} while (id == 0 || m_pending.contains(id));
+				pending_request entry;
+				entry.world = std::string(world);
+				entry.link = link.get();
+				entry.answer = answer;
+				entry.reply_on = reply_on;
+				entry.timer = std::make_shared<asio::steady_timer>(link->executor());
+				entry.on_list = on_list;
+				entry.on_change = on_change;
+				m_pending.emplace(id, std::move(entry));
+			}
+		}
+		if (!link)
+		{
+			deliver(reply_on, std::move(on_list), std::move(on_change), world_request_status::unavailable, {},
+				hb::net::login::character_result::world_unavailable);
+			return;
+		}
+
+		request.request_id = id;
+		// Arm the timer and send on the link's strand, where the answer, the timeout and the close also run.
+		asio::post(link->executor(), [this, link, id, request, timeout = m_options.request_timeout] {
+			if (!link->is_open())
+			{
+				finish(id, world_request_status::unavailable, nullptr, nullptr);
+				return;
+			}
+			std::shared_ptr<asio::steady_timer> timer;
+			{
+				std::scoped_lock lock(m_mutex);
+				const auto found = m_pending.find(id);
+				if (found == m_pending.end())
+					return;  // the link closed first and already ended it
+				timer = found->second.timer;
+			}
+			timer->expires_after(timeout);
+			timer->async_wait([this, id](const asio::error_code& error) {
+				if (error)
+					return;
+				std::string world_name;
+				{
+					std::scoped_lock lock(m_mutex);
+					const auto found = m_pending.find(id);
+					if (found != m_pending.end())
+						world_name = found->second.world;
+				}
+				log::warning("world {}: request {} timed out", world_name, id);
+				finish(id, world_request_status::unavailable, nullptr, nullptr);
+			});
+			if (!link->send(request))
+				finish(id, world_request_status::unavailable, nullptr, nullptr);
+		});
+	}
+
+	void world_link_service::finish(std::uint32_t request_id, world_request_status status, character_list_reply* list,
+		const hb::net::login::character_result* change)
+	{
+		pending_request entry;
+		{
+			std::scoped_lock lock(m_mutex);
+			const auto found = m_pending.find(request_id);
+			if (found == m_pending.end())
+				return;
+			entry = std::move(found->second);
+			m_pending.erase(found);
+		}
+		if (entry.timer)
+			entry.timer->cancel();
+		deliver(entry.reply_on, std::move(entry.on_list), std::move(entry.on_change), status,
+			list ? std::move(*list) : character_list_reply{},
+			change ? *change : hb::net::login::character_result::world_unavailable);
+	}
+
+	void world_link_service::finish_all(const hb::net::connection& link)
+	{
+		std::vector<std::uint32_t> ids;
+		{
+			std::scoped_lock lock(m_mutex);
+			for (const auto& [id, entry] : m_pending)
+			{
+				if (entry.link == &link)
+					ids.push_back(id);
+			}
+		}
+		for (const std::uint32_t id : ids)
+			finish(id, world_request_status::unavailable, nullptr, nullptr);
+	}
+
+	world_link_service::answer_check world_link_service::check_answer(const hb::net::connection& link, std::uint32_t request_id,
+		message_id answer) const
+	{
+		std::scoped_lock lock(m_mutex);
+		const auto found = m_pending.find(request_id);
+		if (found == m_pending.end())
+			return answer_check::unknown;
+		return found->second.link == &link && found->second.answer == answer ? answer_check::matched : answer_check::mismatched;
+	}
+
+	void world_link_service::on_list_response(const std::shared_ptr<peer>& state, hb::net::connection& link, const hb::net::frame& received)
+	{
+		link::character_list_response head{};
+		std::vector<hb::net::character_summary> summaries;
+		if (!hb::net::decode_character_list(received, head, summaries))
+		{
+			link.close(close_reason::protocol_error, "malformed character_list_response");
+			return;
+		}
+		switch (check_answer(link, head.request_id, message_id::link_character_list_response))
+		{
+		case answer_check::unknown:
+			log::debug("world {}: late character list for request {} dropped", state->world, head.request_id);
+			return;
+		case answer_check::mismatched:
+			link.close(close_reason::protocol_error, "character_list_response for a request it was not sent");
+			return;
+		case answer_check::matched:
+			break;
+		}
+		character_list_reply reply;
+		reply.max_slots = head.max_slots;
+		reply.characters = std::move(summaries);
+		finish(head.request_id, world_request_status::answered, &reply, nullptr);
+	}
+
+	void world_link_service::on_change_response(const std::shared_ptr<peer>& state, hb::net::connection& link, const hb::net::frame& received)
+	{
+		link::character_change_response response{};
+		if (!hb::net::decode(received, response))
+		{
+			link.close(close_reason::protocol_error, "malformed character_change_response");
+			return;
+		}
+		switch (check_answer(link, response.request_id, message_id::link_character_change_response))
+		{
+		case answer_check::unknown:
+			log::debug("world {}: late character change answer for request {} dropped", state->world, response.request_id);
+			return;
+		case answer_check::mismatched:
+			link.close(close_reason::protocol_error, "character_change_response for a request it was not sent");
+			return;
+		case answer_check::matched:
+			break;
+		}
+		finish(response.request_id, world_request_status::answered, nullptr, &response.result);
 	}
 
 	const allowed_world* world_link_service::find_world(std::string_view name) const
@@ -176,11 +392,15 @@ namespace hb::server::login
 			return;
 		}
 		case message_id::link_character_list_response:
+			on_list_response(state, link, received);
+			return;
 		case message_id::link_character_change_response:
+			on_change_response(state, link, received);
+			return;
 		case message_id::link_session_grant_response:
 		case message_id::link_session_started:
 		case message_id::link_session_ended:
-			// Character and session traffic is handled from LOGIN-006/007 on.
+			// Session traffic is handled from LOGIN-008 on.
 			log::debug("world {}: message 0x{:04x} not handled yet", state->world, id);
 			return;
 		default:
@@ -262,6 +482,8 @@ namespace hb::server::login
 	{
 		if (state->heartbeat)
 			state->heartbeat->stop();
+		// Every client request waiting on this link ends as unavailable, whichever way the link closed.
+		finish_all(link);
 		if (!state->registered)
 		{
 			log::info("world link from {}:{} closed before registering: {}{}{}", link.remote_address(), link.remote_port(),

@@ -50,4 +50,7 @@ namespace tests
 
 	// auth_tests.cpp: each case uses its own subfolder of the given folder
 	void auth_tests(runner& t, const std::filesystem::path& folder);
+
+	// character_tests.cpp: character brokering against a scripted World; subfolders of the given folder
+	void character_tests(runner& t, const std::filesystem::path& folder);
 }
